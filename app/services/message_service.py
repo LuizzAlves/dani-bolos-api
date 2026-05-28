@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from app.core.payload_parser import parse_evolution_payload
 from app.core.classifier import classify_input, ClassificationResult
 from app.core.state_machine import resolve_transition
-from app.core.order_engine import execute_action
+from app.core.order_engine import execute_action, ActionContext
 from app.core.response_builder import build_response
 from app.core.semantic_translator import semantic_translate
 from app.models import (
@@ -32,6 +32,10 @@ from app.schemas.messages import ResponseItem
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+RETURN_MENU_COMMANDS = {"menu", "voltar", "inicio", "início", "comecar", "começar", "principal", "menu principal"}
+CANCEL_COMMANDS = {"cancelar", "cancela", "desistir", "parar", "encerrar"}
+GREETING_COMMANDS = {"oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"}
 
 
 def _is_expired(dt: datetime | None) -> bool:
@@ -143,6 +147,17 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
     }
     if conversation.state in order_states:
         active_order = await order_repo.get_active_order(db, conversation.id)
+
+    navigation_result = await _handle_global_navigation_command(
+        db=db,
+        msg=msg,
+        conversation=conversation,
+        active_order=active_order,
+        client_name=client.name,
+        order_states=order_states,
+    )
+    if navigation_result:
+        return navigation_result
 
     # 11. Carregar catálogo apenas quando necessário
     catalog_items = await _load_catalog_for_state(db, conversation.state)
@@ -313,9 +328,20 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
 
     # 21. Resolver e enviar mídia
     if ctx.media_references:
-        media_items = await media_service.resolve_media_items(db, ctx.media_references)
-        if media_items:
-            await media_service.send_media_items(msg.phone, media_items)
+        try:
+            media_items = await media_service.resolve_media_items(db, ctx.media_references)
+            if media_items:
+                await media_service.send_media_items(msg.phone, media_items)
+        except Exception as e:
+            logger.error("media_send_failed", error=str(e), phone=msg.phone[:6] + "***")
+            await event_repo.log_event(
+                db,
+                EventTypeEnum.ERROR,
+                conversation_id=conversation.id,
+                order_id=order_id,
+                payload={"error": "Failed to send catalog media", "detail": str(e)[:240]},
+            )
+            await db.commit()
 
     # 22. Enviar respostas de texto
     for resp in responses:
@@ -335,6 +361,93 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
     return WebhookResponse(
         status="ok",
         message=f"Processed: {transition.action_code.value}",
+        processed=True,
+    )
+
+
+async def _handle_global_navigation_command(
+    db: AsyncSession,
+    msg: ParsedMessage,
+    conversation,
+    active_order,
+    client_name: str | None,
+    order_states: set[ConversationState],
+) -> WebhookResponse | None:
+    """Trata comandos como menu, voltar e cancelar sem depender da State Machine."""
+    normalized = (msg.normalized_text or "").strip()
+    if not normalized:
+        return None
+
+    wants_menu = normalized in RETURN_MENU_COMMANDS or (
+        conversation.state == ConversationState.MENU_PRINCIPAL
+        and normalized in GREETING_COMMANDS
+    )
+    wants_cancel = normalized in CANCEL_COMMANDS
+
+    if not wants_menu and not wants_cancel:
+        return None
+
+    ctx = ActionContext()
+    responses: list[ResponseItem] = []
+
+    if active_order and conversation.state in order_states:
+        await order_repo.cancel_order(db, active_order.id)
+        await event_repo.log_event(
+            db,
+            EventTypeEnum.ORDER_CANCELLED,
+            conversation_id=conversation.id,
+            order_id=active_order.id,
+            payload={"reason": "client_navigation_cancel", "command": normalized},
+        )
+        responses.append(ResponseItem(text="Tudo bem, cancelei o rascunho desse pedido e voltei para o menu principal."))
+    elif conversation.state in {
+        ConversationState.PESQUISA,
+        ConversationState.PESQUISA_VALORES,
+        ConversationState.CONSULTA_PEDIDO,
+        ConversationState.MENU_PRINCIPAL,
+    }:
+        if wants_cancel and conversation.state == ConversationState.CONSULTA_PEDIDO:
+            responses.append(ResponseItem(text="Consulta cancelada. Voltando ao menu principal."))
+        elif wants_menu and conversation.state != ConversationState.MENU_PRINCIPAL:
+            responses.append(ResponseItem(text="Voltando ao menu principal."))
+    else:
+        return None
+
+    await conv_repo.update_conversation_state(
+        db,
+        conversation.id,
+        new_state=ConversationState.MENU_PRINCIPAL,
+        active_flow=ActiveFlowType.MENU,
+        fallback_count=0,
+    )
+    await event_repo.log_event(
+        db,
+        EventTypeEnum.STATE_CHANGED,
+        conversation_id=conversation.id,
+        order_id=active_order.id if active_order else None,
+        payload={
+            "from": conversation.state.value,
+            "to": ConversationState.MENU_PRINCIPAL.value,
+            "trigger": "GLOBAL_NAVIGATION",
+            "command": normalized,
+        },
+    )
+    await db.commit()
+
+    responses.extend(build_response(
+        action_code=SmActionEnum.SHOW_MENU,
+        ctx=ctx,
+        current_state=ConversationState.MENU_PRINCIPAL,
+        client_name=client_name,
+    ))
+
+    for resp in responses:
+        if resp.type == "text" and resp.text:
+            await evo_client.send_text(msg.phone, resp.text)
+
+    return WebhookResponse(
+        status="ok",
+        message=f"Navigation command: {normalized}",
         processed=True,
     )
 

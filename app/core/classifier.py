@@ -24,6 +24,10 @@ HUMAN_ALIASES = {
     "preciso de ajuda", "ajuda",
 }
 
+GREETING_ALIASES = {"oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"}
+MENU_RETURN_ALIASES = {"menu", "voltar", "inicio", "início", "comecar", "começar", "principal", "menu principal"}
+GLOBAL_CANCEL_ALIASES = {"cancelar", "cancela", "desistir", "parar", "encerrar"}
+
 # Aliases de menu principal
 MENU_ALIASES = {
     "ver catalogo": SmTriggerEnum.OPTION_1,
@@ -143,6 +147,9 @@ def _classify_novo_cliente(text, normalized, catalog_items, order_context):
 
 def _classify_menu(text, normalized, catalog_items, order_context):
     """Menu principal: opções 1-4 ou aliases."""
+    if normalized in GREETING_ALIASES or normalized in MENU_RETURN_ALIASES:
+        return ClassificationResult(trigger=SmTriggerEnum.INPUT_VALID)
+
     # Número direto
     option = _match_option_number(normalized)
     if option:
@@ -158,6 +165,9 @@ def _classify_menu(text, normalized, catalog_items, order_context):
 
 def _classify_pesquisa(text, normalized, catalog_items, order_context):
     """Submenu de pesquisa: opções 1-4."""
+    if normalized in MENU_RETURN_ALIASES or normalized in GLOBAL_CANCEL_ALIASES:
+        return ClassificationResult(trigger=SmTriggerEnum.INPUT_VALID, matched_value="RETURN_MENU")
+
     option = _match_option_number(normalized)
     if option:
         return ClassificationResult(trigger=option)
@@ -391,6 +401,9 @@ def _classify_confirmacao(text, normalized, catalog_items, order_context):
 
 def _classify_consulta_pedido(text, normalized, catalog_items, order_context):
     """Consulta de pedido: aceitar número do pedido."""
+    if normalized in MENU_RETURN_ALIASES or normalized in GLOBAL_CANCEL_ALIASES:
+        return ClassificationResult(trigger=SmTriggerEnum.INPUT_VALID, matched_value="RETURN_MENU")
+
     num = _parse_int(normalized.replace("#", "").strip())
     if num is not None:
         return ClassificationResult(

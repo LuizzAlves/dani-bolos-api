@@ -55,6 +55,29 @@ class TestMenuClassification:
         r = classify_input(ConversationState.MENU_PRINCIPAL, "falar com a Dani", "falar com a dani")
         assert r.trigger == SmTriggerEnum.HUMAN_REQUESTED
 
+    def test_greeting_repeats_menu(self):
+        r = classify_input(ConversationState.MENU_PRINCIPAL, "oi", "oi")
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+
+
+class TestNavigationClassification:
+    """Testa comandos de navegação que não devem virar fallback."""
+
+    def test_voltar_from_search(self):
+        r = classify_input(ConversationState.PESQUISA, "voltar", "voltar")
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+        assert r.matched_value == "RETURN_MENU"
+
+    def test_cancelar_from_order_lookup(self):
+        r = classify_input(ConversationState.CONSULTA_PEDIDO, "cancelar", "cancelar")
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+        assert r.matched_value == "RETURN_MENU"
+
+    def test_menu_from_order_lookup(self):
+        r = classify_input(ConversationState.CONSULTA_PEDIDO, "menu", "menu")
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+        assert r.matched_value == "RETURN_MENU"
+
 
 class TestMassaClassification:
     """Testa classificação de massa."""
