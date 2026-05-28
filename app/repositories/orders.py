@@ -5,17 +5,31 @@ Repositório de pedidos.
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Order, OrderExtra, OrderStatus, CakeShape, DoughType
+
+
+FIRST_ORDER_NUMBER = 1548
+
+
+async def _next_order_number(db: AsyncSession) -> int:
+    """Gera o próximo número legível do pedido com trava transacional."""
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext('danibolos_orders_order_number'))"))
+    result = await db.execute(
+        select(func.coalesce(func.max(Order.order_number), FIRST_ORDER_NUMBER - 1) + 1)
+    )
+    return int(result.scalar_one())
 
 
 async def create_draft_order(
     db: AsyncSession, client_id: UUID, conversation_id: UUID
 ) -> Order:
     """Cria um pedido rascunho."""
+    order_number = await _next_order_number(db)
     order = Order(
+        order_number=order_number,
         client_id=client_id,
         conversation_id=conversation_id,
         status=OrderStatus.RASCUNHO,

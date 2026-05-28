@@ -51,6 +51,23 @@ class TestGoogleSheetsIntegration:
         }
 
     @pytest.mark.asyncio
+    @patch("httpx.AsyncClient")
+    async def test_send_to_webhook_follows_apps_script_redirect(self, mock_client_cls, mock_settings):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"ok": True}
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.post.return_value = mock_response
+        mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+        result = await send_to_webhook("alert", {"message": "teste"})
+
+        assert result is True
+        _, kwargs = mock_client_cls.call_args
+        assert kwargs["follow_redirects"] is True
+
+    @pytest.mark.asyncio
     @patch("httpx.AsyncClient.post")
     async def test_send_to_webhook_alert(self, mock_post, mock_settings):
         mock_response = MagicMock()

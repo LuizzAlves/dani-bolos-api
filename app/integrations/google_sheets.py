@@ -54,7 +54,7 @@ async def send_to_webhook(action: str, payload: dict[str, Any]) -> bool:
     
     try:
         timeout = httpx.Timeout(settings.GOOGLE_SHEETS_TIMEOUT_SECONDS)
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.post(url, headers=headers, json=data)
             response.raise_for_status()
             
