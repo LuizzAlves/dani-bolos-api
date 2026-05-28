@@ -94,3 +94,27 @@ class TestStateTransitionMap:
         ]
         for action_name in required:
             assert hasattr(SmActionEnum, action_name), f"Missing action: {action_name}"
+
+
+class TestBuiltinTransitionFallback:
+    """Garante que fluxos críticos não travem se o seed do banco estiver incompleto."""
+
+    @pytest.mark.asyncio
+    async def test_menu_option_2_starts_order_without_db_transition(self):
+        from app.core.state_machine import resolve_transition
+
+        conversation = MagicMock()
+        conversation.id = uuid4()
+        conversation.state = ConversationState.MENU_PRINCIPAL
+        conversation.fallback_count = 0
+
+        with (
+            patch("app.repositories.state_transitions.get_transition", new=AsyncMock(return_value=None)),
+            patch("app.repositories.conversations.reset_fallback", new=AsyncMock()),
+        ):
+            result = await resolve_transition(AsyncMock(), conversation, SmTriggerEnum.OPTION_2)
+
+        assert result is not None
+        assert result.next_state == ConversationState.ESCOLHENDO_TAMANHO
+        assert result.action_code == SmActionEnum.CREATE_ORDER_AND_ASK_SIZE
+        assert result.fallback_effect == FallbackEffectEnum.RESET

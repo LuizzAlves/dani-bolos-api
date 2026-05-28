@@ -3,6 +3,7 @@ Message Service: orquestrador principal do processamento de mensagens.
 Equivalente ao workflow principal do n8n.
 """
 
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -16,6 +17,7 @@ from app.core.semantic_translator import semantic_translate
 from app.models import (
     ConversationState, SmTriggerEnum, SmActionEnum,
     EventTypeEnum, ActiveFlowType,
+    Client, Conversation, Order, OrderExtra, Event,
 )
 from app.repositories import (
     clients as client_repo,
@@ -36,6 +38,7 @@ logger = get_logger(__name__)
 RETURN_MENU_COMMANDS = {"menu", "voltar", "inicio", "início", "comecar", "começar", "principal", "menu principal"}
 CANCEL_COMMANDS = {"cancelar", "cancela", "desistir", "parar", "encerrar"}
 GREETING_COMMANDS = {"oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"}
+DEV_RESET_COMMAND = "ThinkDevLuiz@"
 
 
 def _is_expired(dt: datetime | None) -> bool:
@@ -73,6 +76,23 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
             message=msg.ignore_reason or "ignored",
         )
         
+    if (msg.text or "").strip() == DEV_RESET_COMMAND:
+        deleted = await _reset_client_test_data(db, msg.phone)
+        await db.commit()
+        try:
+            await evo_client.send_text(
+                msg.phone,
+                "Reset de teste aplicado. Envie uma nova mensagem para começar do zero.",
+            )
+        except Exception:
+            pass
+        logger.info("dev_reset_command_applied", phone=msg.phone[:6] + "***", deleted=deleted)
+        return WebhookResponse(
+            status="ok",
+            message="Dev reset applied",
+            processed=True,
+        )
+
     # 2.5 Idempotência
     if await event_repo.has_message_event(db, msg.message_id):
         logger.info("message_id_idempotency_skip", message_id=msg.message_id)
@@ -363,6 +383,50 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
         message=f"Processed: {transition.action_code.value}",
         processed=True,
     )
+
+
+async def _reset_client_test_data(db: AsyncSession, phone: str) -> dict[str, int]:
+    """Remove dados do telefone de teste para recomeçar a conversa do zero."""
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    phone_candidates = {phone, digits}
+    if digits.startswith("55"):
+        phone_candidates.add(digits[2:])
+    elif digits:
+        phone_candidates.add(f"55{digits}")
+
+    clients_result = await db.execute(
+        select(Client.id).where(Client.phone.in_(phone_candidates))
+    )
+    client_ids = list(clients_result.scalars().all())
+    if not client_ids:
+        return {"clients": 0, "conversations": 0, "orders": 0}
+
+    convs_result = await db.execute(
+        select(Conversation.id).where(Conversation.client_id.in_(client_ids))
+    )
+    conv_ids = list(convs_result.scalars().all())
+
+    orders_result = await db.execute(
+        select(Order.id).where(Order.client_id.in_(client_ids))
+    )
+    order_ids = list(orders_result.scalars().all())
+
+    if order_ids:
+        await db.execute(delete(OrderExtra).where(OrderExtra.order_id.in_(order_ids)))
+        await db.execute(delete(Event).where(Event.order_id.in_(order_ids)))
+    if conv_ids:
+        await db.execute(delete(Event).where(Event.conversation_id.in_(conv_ids)))
+    if order_ids:
+        await db.execute(delete(Order).where(Order.id.in_(order_ids)))
+    if conv_ids:
+        await db.execute(delete(Conversation).where(Conversation.id.in_(conv_ids)))
+    await db.execute(delete(Client).where(Client.id.in_(client_ids)))
+
+    return {
+        "clients": len(client_ids),
+        "conversations": len(conv_ids),
+        "orders": len(order_ids),
+    }
 
 
 async def _handle_global_navigation_command(
