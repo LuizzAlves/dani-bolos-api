@@ -3,6 +3,7 @@ Order Engine: executa ações determinadas pela State Machine.
 Cada action_code tem um handler que salva dados e retorna contexto para a resposta.
 """
 
+import re
 from decimal import Decimal
 from datetime import time as dt_time
 from uuid import UUID
@@ -26,6 +27,20 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+VALUE_QUOTE_ACTION = "VALUE_QUOTE"
+VALUE_CONFIRM_ALIASES = {
+    "ok", "sim", "pode ser", "esse", "essa", "isso", "ta bom", "tá bom",
+    "esta bom", "está bom", "perfeito", "confirmar", "confirmo",
+}
+VALUE_LARGER_ALIASES = {
+    "maior", "mais", "proximo maior", "próximo maior", "um maior",
+    "opcao maior", "opção maior", "quero maior",
+}
+VALUE_SMALLER_ALIASES = {
+    "menor", "menos", "proximo menor", "próximo menor", "um menor",
+    "opcao menor", "opção menor", "quero menor",
+}
+
 
 class ActionContext:
     """Contexto produzido pela execução de uma ação."""
@@ -36,6 +51,144 @@ class ActionContext:
         self.media_references: list[str] = []
         self.message_data: dict = {}
         self.error: str | None = None
+
+
+def _parse_value_criteria(text: str) -> dict:
+    """Interpreta a entrada do calculador de valores."""
+    normalized = (text or "").strip().lower()
+    compact = re.sub(r"\s+", " ", normalized)
+
+    if compact in VALUE_CONFIRM_ALIASES:
+        return {"command": "confirm"}
+    if compact in VALUE_LARGER_ALIASES or "maior" in compact:
+        return {"command": "adjust", "direction": "larger"}
+    if compact in VALUE_SMALLER_ALIASES or "menor" in compact:
+        return {"command": "adjust", "direction": "smaller"}
+
+    match = re.search(r"\d+(?:[,.]\d+)?", compact)
+    if not match:
+        return {"raw": compact}
+
+    value = Decimal(match.group(0).replace(",", "."))
+    if any(word in compact for word in ("pessoa", "pessoas", "fatia", "fatias", "convidado", "convidados")):
+        people = int(value.to_integral_value())
+        return {
+            "kind": "people",
+            "value": people,
+            "requested": {"kind": "people", "value": people},
+        }
+    if any(word in compact for word in ("kg", "kilo", "quilo", "quilos")):
+        return {
+            "kind": "weight",
+            "value": float(value),
+            "requested": {"kind": "weight", "value": float(value)},
+        }
+
+    # Números soltos altos costumam ser quantidade de pessoas.
+    if value >= 8:
+        people = int(value.to_integral_value())
+        return {
+            "kind": "people",
+            "value": people,
+            "requested": {"kind": "people", "value": people},
+        }
+
+    return {
+        "kind": "weight",
+        "value": float(value),
+        "requested": {"kind": "weight", "value": float(value)},
+    }
+
+
+def _sort_sizes_for_values(sizes: list) -> list:
+    """Ordena tamanhos do menor para o maior para navegação maior/menor."""
+    return sorted(
+        sizes,
+        key=lambda size: (
+            int(getattr(size, "servings", 0) or 0),
+            float(getattr(size, "weight_kg", 0) or 0),
+            int(getattr(size, "id", 0) or 0),
+        ),
+    )
+
+
+def _size_index(sorted_sizes: list, size_id: int) -> int:
+    for index, size in enumerate(sorted_sizes):
+        if int(size.id) == int(size_id):
+            return index
+    return 0
+
+
+def _resolve_value_size(sizes: list, criteria: dict, latest_quote: dict | None):
+    """Escolhe o tamanho sugerido para a pesquisa de valores."""
+    if not sizes:
+        return None
+
+    sorted_sizes = _sort_sizes_for_values(sizes)
+    has_latest = bool(latest_quote and latest_quote.get("selected_size_id"))
+    current_index = _size_index(
+        sorted_sizes, (latest_quote or {}).get("selected_size_id", sorted_sizes[0].id)
+    )
+
+    if criteria.get("command") == "confirm":
+        if not has_latest:
+            return None
+        return sorted_sizes[current_index]
+
+    direction = criteria.get("direction")
+    if direction == "larger":
+        if not has_latest:
+            return None
+        return sorted_sizes[min(current_index + 1, len(sorted_sizes) - 1)]
+    if direction == "smaller":
+        if not has_latest:
+            return None
+        return sorted_sizes[max(current_index - 1, 0)]
+
+    kind = criteria.get("kind")
+    value = criteria.get("value")
+    if kind == "people" and value is not None:
+        return min(sorted_sizes, key=lambda size: abs(int(size.servings) - int(value)))
+    if kind == "weight" and value is not None:
+        return min(sorted_sizes, key=lambda size: abs(float(size.weight_kg) - float(value)))
+
+    return None
+
+
+def _money(value) -> str:
+    return f"R$ {Decimal(str(value)):.2f}".replace(".", ",")
+
+
+def _format_requested(requested: dict) -> str:
+    if requested.get("kind") == "people":
+        return f"para cerca de *{requested.get('value')} pessoas*"
+    if requested.get("kind") == "weight":
+        return f"para cerca de *{requested.get('value')} kg*"
+    return "para o que você pediu"
+
+
+def _format_value_quote(selected_size, sorted_sizes: list, requested: dict, direction: str | None) -> str:
+    index = _size_index(sorted_sizes, selected_size.id)
+    layers = selected_size.filling_layers
+    layer_text = f"{layers} recheio" if layers == 1 else f"{layers} recheios"
+    shape = selected_size.shape.value.capitalize()
+
+    boundary = ""
+    if direction == "larger" and index == len(sorted_sizes) - 1:
+        boundary = "\n\nEsse já é o maior tamanho cadastrado no catálogo."
+    elif direction == "smaller" and index == 0:
+        boundary = "\n\nEsse já é o menor tamanho cadastrado no catálogo."
+
+    return (
+        f"📊 Encontrei uma opção próxima {_format_requested(requested)}:\n\n"
+        f"*{selected_size.description}* ({layer_text})\n"
+        f"{shape} • atende aproximadamente *{selected_size.servings} fatias/pessoas*\n"
+        f"Massa branca: {_money(selected_size.price_white)}\n"
+        f"Massa chocolate: {_money(selected_size.price_chocolate)}"
+        f"{boundary}\n\n"
+        "Esse tamanho fica bom para você?\n"
+        "Responda *ok*, *maior*, *menor* ou *menu*."
+    )
 
 
 async def execute_action(
@@ -155,6 +308,53 @@ async def _handle_show_values(db, ctx, conversation_id, client_id, classificatio
     """Mostra cálculo de valores."""
     sizes = await catalog_repo.get_active_sizes(db)
     ctx.catalog_items = sizes
+    criteria = _parse_value_criteria(classification.matched_value or "")
+    latest_quote = await event_repo.get_latest_payload_by_action(
+        db, conversation_id, VALUE_QUOTE_ACTION
+    )
+
+    selected_size = _resolve_value_size(sizes, criteria, latest_quote)
+    if not selected_size:
+        ctx.message_data["values_response_text"] = (
+            "Não consegui encontrar um tamanho com essa informação.\n\n"
+            "Me diga uma quantidade de pessoas ou fatias, por exemplo: "
+            "\"40 pessoas\" ou \"3 kg\"."
+        )
+        ctx.message_data["keep_values_flow"] = True
+        return
+
+    sorted_sizes = _sort_sizes_for_values(sizes)
+    selected_index = _size_index(sorted_sizes, selected_size.id)
+    requested = criteria.get("requested") or (latest_quote or {}).get("requested") or {}
+
+    await event_repo.log_event(
+        db,
+        EventTypeEnum.MESSAGE_SENT,
+        conversation_id=conversation_id,
+        payload={
+            "action": VALUE_QUOTE_ACTION,
+            "selected_size_id": selected_size.id,
+            "selected_index": selected_index,
+            "requested": requested,
+        },
+    )
+
+    if criteria.get("command") == "confirm":
+        ctx.message_data["return_to_menu"] = True
+        ctx.message_data["values_response_text"] = (
+            "Perfeito, esse tamanho fica como referência. 💕\n\n"
+            "Quando quiser transformar isso em pedido, é só escolher "
+            "*Fazer Pedido* no menu."
+        )
+        return
+
+    ctx.message_data["keep_values_flow"] = True
+    ctx.message_data["values_response_text"] = _format_value_quote(
+        selected_size=selected_size,
+        sorted_sizes=sorted_sizes,
+        requested=requested,
+        direction=criteria.get("direction"),
+    )
 
 
 async def _handle_create_order(db, ctx, conversation_id, client_id, classification, order_id):

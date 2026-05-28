@@ -42,3 +42,23 @@ async def has_message_event(db: AsyncSession, message_id: str) -> bool:
     )
     result = await db.execute(query)
     return result.first() is not None
+
+
+async def get_latest_payload_by_action(
+    db: AsyncSession,
+    conversation_id: UUID,
+    action: str,
+) -> dict | None:
+    """Busca o payload mais recente de um evento marcado por action."""
+    query = (
+        select(Event)
+        .where(
+            Event.conversation_id == conversation_id,
+            Event.payload.op("->>")("action") == action,
+        )
+        .order_by(Event.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(query)
+    event = result.scalar_one_or_none()
+    return event.payload if event else None

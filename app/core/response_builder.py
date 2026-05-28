@@ -183,6 +183,14 @@ def _build_ask_values(ctx, name):
 
 
 def _build_show_values(ctx, name):
+    custom_text = ctx.message_data.get("values_response_text")
+    if custom_text:
+        items = [ResponseItem(text=custom_text)]
+        if ctx.message_data.get("return_to_menu"):
+            items.append(ResponseItem(text="Voltando ao menu principal... ⬅️"))
+            items.extend(_build_menu(ctx, name))
+        return items
+
     items = [ResponseItem(text="📊 Aqui estão os valores que encontrei:")]
     items.append(ResponseItem(text="Voltando ao menu principal... ⬅️"))
     items.extend(_build_menu(ctx, name))
