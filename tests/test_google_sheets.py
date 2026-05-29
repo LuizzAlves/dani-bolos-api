@@ -130,7 +130,7 @@ class TestGoogleSheetsService:
         finish = Finish(name="Chantininho")
         
         extra_obj = Extra(name="Morango")
-        order_extra = OrderExtra(extra=extra_obj)
+        order_extra = OrderExtra(extra=extra_obj, layers=2, total_price=30.00)
         
         order = Order(
             id=order_id,
@@ -148,7 +148,7 @@ class TestGoogleSheetsService:
             base_value=100.50,
             extras_value=15.00,
             total_value=115.50,
-            notes="Teste nota",
+            notes="Retirada por: Maria\nObservações: Teste nota",
             created_at=datetime(2026, 5, 28, 14, 0)
         )
         
@@ -173,9 +173,11 @@ class TestGoogleSheetsService:
         assert payload["filling_1"] == "Brigadeiro"
         assert payload["filling_2"] is None
         assert payload["finish"] == "Chantininho"
-        assert payload["extras"] == ["Morango"]
+        assert payload["pickup_person_name"] == "Maria"
+        assert payload["extras"] == [{"name": "Morango", "layers": 2, "total_price": 30.0}]
         assert payload["pickup_date"] == "2026-06-01"
         assert payload["pickup_time"] == "14:30"
+        assert payload["summary"] == "15 fatias | BRANCA | Brigadeiro | Morango (2 camadas) | Chantininho"
         assert payload["base_value"] == 100.5
         assert payload["extras_value"] == 15.0
         assert payload["total_value"] == 115.5

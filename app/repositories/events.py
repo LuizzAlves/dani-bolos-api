@@ -48,14 +48,19 @@ async def get_latest_payload_by_action(
     db: AsyncSession,
     conversation_id: UUID,
     action: str,
+    order_id: UUID | None = None,
 ) -> dict | None:
     """Busca o payload mais recente de um evento marcado por action."""
+    filters = [
+        Event.conversation_id == conversation_id,
+        Event.payload.op("->>")("action") == action,
+    ]
+    if order_id is not None:
+        filters.append(Event.order_id == order_id)
+
     query = (
         select(Event)
-        .where(
-            Event.conversation_id == conversation_id,
-            Event.payload.op("->>")("action") == action,
-        )
+        .where(*filters)
         .order_by(Event.created_at.desc())
         .limit(1)
     )

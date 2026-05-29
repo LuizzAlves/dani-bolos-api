@@ -256,10 +256,23 @@ class TestTimeParsing:
 class TestAdicionaisClassification:
     """Testa classificação de adicionais com opção de pular."""
 
+    class MockExtra:
+        def __init__(self, id, name):
+            self.id = id
+            self.name = name
+
+    @pytest.fixture
+    def extras(self):
+        return [
+            self.MockExtra(1, "Cereja nos recheios"),
+            self.MockExtra(2, "Morango fresco"),
+        ]
+
     def test_pular(self):
         r = classify_input(ConversationState.ESCOLHENDO_ADICIONAIS, "pular", "pular")
         assert r.trigger == SmTriggerEnum.INPUT_VALID
         assert r.matched_value == "SKIP"
+        assert r.extra_data["layers"] == 0
 
     def test_nenhum(self):
         r = classify_input(ConversationState.ESCOLHENDO_ADICIONAIS, "nenhum", "nenhum")
@@ -270,3 +283,25 @@ class TestAdicionaisClassification:
         r = classify_input(ConversationState.ESCOLHENDO_ADICIONAIS, "0", "0")
         assert r.trigger == SmTriggerEnum.INPUT_VALID
         assert r.matched_value == "SKIP"
+
+    def test_numero_com_duas_camadas(self, extras):
+        r = classify_input(
+            ConversationState.ESCOLHENDO_ADICIONAIS,
+            "1 em 2 camadas",
+            "1 em 2 camadas",
+            extras,
+        )
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+        assert r.matched_id == 1
+        assert r.extra_data["layers"] == 2
+
+    def test_nome_com_uma_camada(self, extras):
+        r = classify_input(
+            ConversationState.ESCOLHENDO_ADICIONAIS,
+            "cereja em uma camada",
+            "cereja em uma camada",
+            extras,
+        )
+        assert r.trigger == SmTriggerEnum.INPUT_VALID
+        assert r.matched_id == 1
+        assert r.extra_data["layers"] == 1

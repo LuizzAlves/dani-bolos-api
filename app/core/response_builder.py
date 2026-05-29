@@ -256,7 +256,10 @@ def _build_ask_extras(ctx, name):
         price_info = f" — R$ {e.price_per_layer}/camada" if e.price_per_layer > 0 else " — consultar valor"
         text += f"*{i}.* {e.name}{price_info}\n"
     text += "\n*0.* Sem adicionais (pular)\n"
-    text += "\n📝 _Digite o número ou \"pular\"._"
+    text += (
+        "\n📝 _Digite o número ou nome do adicional e em quantas camadas._\n"
+        "Exemplos: *1 em 1 camada*, *cereja em 2 camadas* ou *pular*."
+    )
     return [ResponseItem(text=text)]
 
 
@@ -305,6 +308,15 @@ def _build_ask_time(ctx, name):
 
 
 def _build_ask_notes(ctx, name):
+    if ctx.message_data.get("ask_pickup_person_name"):
+        return [
+            ResponseItem(text=(
+                "✅ Horário registrado!\n\n"
+                "👤 Qual o *nome da pessoa que irá retirar* a encomenda?\n\n"
+                "_Digite o nome completo ou como a Dani deve identificar na retirada._"
+            )),
+        ]
+
     return [
         ResponseItem(text=(
             "✅ Horário registrado!\n\n"
@@ -316,6 +328,16 @@ def _build_ask_notes(ctx, name):
 
 
 def _build_show_summary(ctx, name):
+    if ctx.message_data.get("ask_notes_after_pickup_person"):
+        return [
+            ResponseItem(text=(
+                "✅ Nome de retirada registrado!\n\n"
+                "📝 Deseja adicionar alguma *observação* ao pedido?\n"
+                "(mensagem personalizada, alergias, detalhes de decoração, etc.)\n\n"
+                "_Digite sua observação ou \"nenhuma\"._"
+            )),
+        ]
+
     order = ctx.order_data.get("order")
     total = ctx.order_data.get("total_value", Decimal("0"))
 

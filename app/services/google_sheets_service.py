@@ -15,6 +15,42 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _split_order_notes(notes: str | None) -> tuple[str | None, str | None]:
+    """Separa o nome de retirada das observações salvas no campo livre."""
+    if not notes:
+        return None, None
+
+    pickup_person_name = None
+    clean_notes = notes
+    lines = [line.strip() for line in notes.splitlines() if line.strip()]
+    for line in lines:
+        lower = line.lower()
+        if lower.startswith("retirada por:"):
+            pickup_person_name = line.split(":", 1)[1].strip() or None
+        elif lower.startswith("observações:") or lower.startswith("observacoes:"):
+            clean_notes = line.split(":", 1)[1].strip() or "Nenhuma"
+
+    return pickup_person_name, clean_notes
+
+
+def _format_order_summary(order: Order) -> str:
+    parts = [
+        order.size.description if order.size else None,
+        order.dough.value if order.dough else None,
+        order.filling_1.name if order.filling_1 else None,
+        order.filling_2.name if order.filling_2 else None,
+    ]
+    if order.order_extras:
+        parts.extend(
+            f"{oe.extra.name} ({oe.layers} camada{'s' if oe.layers != 1 else ''})"
+            for oe in order.order_extras
+            if oe.extra
+        )
+    if order.finish:
+        parts.append(order.finish.name)
+    return " | ".join(str(part) for part in parts if part)
+
+
 async def upsert_order(db: AsyncSession, order_id: int) -> bool:
     """
     Busca o pedido com todas as relações e envia para o Google Sheets.
@@ -43,21 +79,32 @@ async def upsert_order(db: AsyncSession, order_id: int) -> bool:
 
         # Monta payload com dados reais
         client = order.client
+        pickup_person_name, clean_notes = _split_order_notes(order.notes)
         payload = {
             "order_id": str(order.id),
             "order_number": order.order_number,
             "status": order.status.value if order.status else "DESCONHECIDO",
             "client_name": client.name or "Desconhecido",
             "phone": client.phone,
+            "pickup_person_name": pickup_person_name,
             "size": order.size.description if order.size else None,
             "dough": order.dough.value if order.dough else None,
             "filling_1": order.filling_1.name if order.filling_1 else None,
             "filling_2": order.filling_2.name if order.filling_2 else None,
-            "extras": [oe.extra.name for oe in order.order_extras] if order.order_extras else [],
+            "extras": [
+                {
+                    "name": oe.extra.name,
+                    "layers": oe.layers,
+                    "total_price": float(oe.total_price or 0),
+                }
+                for oe in order.order_extras
+                if oe.extra
+            ] if order.order_extras else [],
             "finish": order.finish.name if order.finish else None,
             "pickup_date": order.pickup_date.strftime("%Y-%m-%d") if order.pickup_date else None,
             "pickup_time": order.pickup_time.strftime("%H:%M") if order.pickup_time else None,
-            "notes": order.notes,
+            "notes": clean_notes,
+            "summary": _format_order_summary(order),
             "base_value": float(order.base_value) if order.base_value else 0.0,
             "extras_value": float(order.extras_value) if order.extras_value else 0.0,
             "total_value": float(order.total_value) if order.total_value else 0.0,

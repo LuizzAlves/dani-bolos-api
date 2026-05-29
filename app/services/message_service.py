@@ -286,6 +286,8 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
         transition.next_state = ConversationState.MENU_PRINCIPAL
     elif ctx.message_data.get("keep_values_flow"):
         transition.next_state = ConversationState.PESQUISA_VALORES
+    elif ctx.message_data.get("keep_observacoes_flow"):
+        transition.next_state = ConversationState.DEFININDO_OBSERVACOES
 
     # 17. Interceptar aprovação manual ANTES de construir a resposta
     if ctx.order_data.get("needs_approval"):

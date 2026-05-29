@@ -40,6 +40,7 @@ VALUE_SMALLER_ALIASES = {
     "menor", "menos", "proximo menor", "próximo menor", "um menor",
     "opcao menor", "opção menor", "quero menor",
 }
+PICKUP_PERSON_NAME_ACTION = "PICKUP_PERSON_NAME_CAPTURED"
 
 
 class ActionContext:
@@ -98,6 +99,23 @@ def _parse_value_criteria(text: str) -> dict:
         "value": float(value),
         "requested": {"kind": "weight", "value": float(value)},
     }
+
+
+def _normalize_optional_text(text: str | None) -> str:
+    value = (text or "").strip()
+    if not value:
+        return "Nenhuma"
+    normalized = value.lower()
+    if normalized in {"nao", "não", "nenhum", "nenhuma", "sem observacao", "sem observação", "pular"}:
+        return "Nenhuma"
+    return value
+
+
+def _compose_order_notes(pickup_person_name: str, notes: str | None) -> str:
+    return (
+        f"Retirada por: {pickup_person_name.strip() or 'Não informado'}\n"
+        f"Observações: {_normalize_optional_text(notes)}"
+    )
 
 
 def _sort_sizes_for_values(sizes: list) -> list:
@@ -508,7 +526,11 @@ async def _handle_save_extras(db, ctx, conversation_id, client_id, classificatio
                 # Marcar status de alerta para o message_service poder lidar se necessário
                 return
 
-            layers = order.filling_count or 1
+            max_layers = max(1, int(order.filling_count or 1))
+            requested_layers = classification.extra_data.get("layers")
+            layers = max_layers
+            if requested_layers:
+                layers = max(1, min(int(requested_layers), max_layers))
             await order_repo.add_order_extra(
                 db, order_id, extra.id, layers, Decimal(str(extra.price_per_layer))
             )
@@ -518,7 +540,7 @@ async def _handle_save_extras(db, ctx, conversation_id, client_id, classificatio
                 db, EventTypeEnum.EXTRA_SELECTED,
                 conversation_id=conversation_id,
                 order_id=order_id,
-                payload={"extra_id": extra.id, "layers": layers},
+                payload={"extra_id": extra.id, "layers": layers, "max_layers": max_layers},
             )
     else:
         await order_repo.update_order_values(db, order_id, extras_value=Decimal("0.00"))
@@ -592,26 +614,61 @@ async def _handle_save_time(db, ctx, conversation_id, client_id, classification,
                 order_id=order_id,
                 payload={"time": slot.label},
             )
+            ctx.message_data["ask_pickup_person_name"] = True
 
 
 async def _handle_save_notes(db, ctx, conversation_id, client_id, classification, order_id):
-    """Salva observações e mostra resumo."""
+    """Captura nome de retirada, depois salva observações e mostra resumo."""
     if not order_id:
         ctx.error = "Pedido não encontrado"
         return
 
-    notes = classification.matched_value or "Nenhuma"
-    await order_repo.update_order_notes(db, order_id, notes)
+    pickup_payload = await event_repo.get_latest_payload_by_action(
+        db,
+        conversation_id,
+        PICKUP_PERSON_NAME_ACTION,
+        order_id=order_id,
+    )
+    if not pickup_payload:
+        pickup_person_name = (classification.matched_value or "").strip()
+        if not pickup_person_name:
+            ctx.error = "Nome de retirada não informado"
+            return
+
+        await event_repo.log_event(
+            db,
+            EventTypeEnum.NOTES_ADDED,
+            conversation_id=conversation_id,
+            order_id=order_id,
+            payload={
+                "action": PICKUP_PERSON_NAME_ACTION,
+                "pickup_person_name": pickup_person_name,
+            },
+        )
+        ctx.message_data["ask_notes_after_pickup_person"] = True
+        ctx.message_data["keep_observacoes_flow"] = True
+        return
+
+    pickup_person_name = pickup_payload.get("pickup_person_name") or "Não informado"
+    notes = _normalize_optional_text(classification.matched_value)
+    full_notes = _compose_order_notes(pickup_person_name, notes)
+
+    await order_repo.update_order_notes(db, order_id, full_notes)
     await event_repo.log_event(
         db, EventTypeEnum.NOTES_ADDED,
         conversation_id=conversation_id,
         order_id=order_id,
-        payload={"notes": notes},
+        payload={
+            "notes": notes,
+            "pickup_person_name": pickup_person_name,
+            "action": "ORDER_NOTES_CAPTURED",
+        },
     )
 
     # Calcular total e preparar resumo
     order = await order_repo.get_active_order(db, conversation_id)
     if order:
+        order.notes = full_notes
         base = order.base_value or Decimal("0")
         extras = order.extras_value or Decimal("0")
         total = base + extras

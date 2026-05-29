@@ -55,6 +55,8 @@ CANCEL_ALIASES = {"nao", "cancelar", "cancela", "desistir", "voltar", "nao quero
 
 # Pular / Nenhum (extras)
 SKIP_ALIASES = {"pular", "nenhum", "nenhuma", "sem adicional", "sem adicionais", "sem extras", "nao quero", "0", "sem nada"}
+ONE_LAYER_ALIASES = {"1 camada", "uma camada", "um recheio", "1 recheio"}
+TWO_LAYER_ALIASES = {"2 camadas", "duas camadas", "dois recheios", "2 recheios"}
 
 # Dias da semana em português
 WEEKDAYS_PT = {
@@ -271,30 +273,40 @@ def _classify_recheio(text, normalized, catalog_items, order_context):
 def _classify_adicionais(text, normalized, catalog_items, order_context):
     """Escolha de adicionais: número, texto ou pular."""
     extras = catalog_items or []
+    layers = _parse_extra_layers(normalized)
 
     # Pular
     if normalized in SKIP_ALIASES:
         return ClassificationResult(
             trigger=SmTriggerEnum.INPUT_VALID,
             matched_value="SKIP",
+            extra_data={"layers": 0},
         )
 
     # Número direto
-    idx = _parse_int(normalized)
+    idx_match = re.match(r"\s*(\d+)\b", normalized)
+    idx = int(idx_match.group(0)) if idx_match else None
     if idx is not None and 1 <= idx <= len(extras):
         extra = extras[idx - 1]
         return ClassificationResult(
             trigger=SmTriggerEnum.INPUT_VALID,
             matched_id=extra.id,
+            extra_data={"layers": layers} if layers else {},
         )
 
     # Match por nome
     for extra in extras:
         name_norm = normalize_text(extra.name)
-        if normalized in name_norm or name_norm in normalized:
+        keywords = [kw for kw in name_norm.split() if len(kw) > 3]
+        if (
+            normalized in name_norm
+            or name_norm in normalized
+            or any(kw in normalized for kw in keywords)
+        ):
             return ClassificationResult(
                 trigger=SmTriggerEnum.INPUT_VALID,
                 matched_id=extra.id,
+                extra_data={"layers": layers} if layers else {},
             )
 
     return ClassificationResult(trigger=SmTriggerEnum.INPUT_INVALID)
@@ -442,6 +454,20 @@ def _parse_int(text: str) -> int | None:
         return int(text.strip())
     except (ValueError, AttributeError):
         return None
+
+
+def _parse_extra_layers(normalized: str) -> int | None:
+    """Extrai se o adicional deve entrar em 1 ou 2 camadas de recheio."""
+    text = re.sub(r"\s+", " ", normalized or "").strip()
+    if any(alias in text for alias in TWO_LAYER_ALIASES):
+        return 2
+    if any(alias in text for alias in ONE_LAYER_ALIASES):
+        return 1
+    if re.search(r"\b2\s*(?:x|camada|camadas|recheio|recheios)\b", text):
+        return 2
+    if re.search(r"\b1\s*(?:x|camada|camadas|recheio|recheios)\b", text):
+        return 1
+    return None
 
 
 def _parse_date(text: str) -> date | None:
