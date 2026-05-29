@@ -35,7 +35,8 @@ from app.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-RETURN_MENU_COMMANDS = {"menu", "voltar", "inicio", "início", "comecar", "começar", "principal", "menu principal"}
+BACK_COMMANDS = {"voltar"}
+RETURN_MENU_COMMANDS = {"menu", "inicio", "início", "comecar", "começar", "principal", "menu principal"}
 CANCEL_COMMANDS = {"cancelar", "cancela", "desistir", "parar", "encerrar"}
 GREETING_COMMANDS = {"oi", "ola", "olá", "bom dia", "boa tarde", "boa noite"}
 DEV_RESET_COMMAND = "ThinkDevLuiz@"
@@ -444,24 +445,34 @@ async def _handle_global_navigation_command(
     client_name: str | None,
     order_states: set[ConversationState],
 ) -> WebhookResponse | None:
-    """Trata comandos como menu, voltar e cancelar sem depender da State Machine."""
+    """Trata comandos de navegação sem depender da State Machine."""
     normalized = (msg.normalized_text or "").strip()
     if not normalized:
         return None
 
+    wants_back = normalized in BACK_COMMANDS
     wants_menu = normalized in RETURN_MENU_COMMANDS or (
         conversation.state == ConversationState.MENU_PRINCIPAL
         and normalized in GREETING_COMMANDS
     )
     wants_cancel = normalized in CANCEL_COMMANDS
 
-    if not wants_menu and not wants_cancel:
+    if not wants_back and not wants_menu and not wants_cancel:
         return None
+
+    if wants_back and active_order and conversation.state in order_states:
+        return await _handle_order_back_command(
+            db=db,
+            msg=msg,
+            conversation=conversation,
+            active_order=active_order,
+            client_name=client_name,
+        )
 
     ctx = ActionContext()
     responses: list[ResponseItem] = []
 
-    if active_order and conversation.state in order_states:
+    if active_order and conversation.state in order_states and (wants_menu or wants_cancel):
         await order_repo.cancel_order(db, active_order.id)
         await event_repo.log_event(
             db,
@@ -479,7 +490,7 @@ async def _handle_global_navigation_command(
     }:
         if wants_cancel and conversation.state == ConversationState.CONSULTA_PEDIDO:
             responses.append(ResponseItem(text="Consulta cancelada. Voltando ao menu principal."))
-        elif wants_menu and conversation.state != ConversationState.MENU_PRINCIPAL:
+        elif (wants_menu or wants_back) and conversation.state != ConversationState.MENU_PRINCIPAL:
             responses.append(ResponseItem(text="Voltando ao menu principal."))
     else:
         return None
@@ -521,6 +532,207 @@ async def _handle_global_navigation_command(
         message=f"Navigation command: {normalized}",
         processed=True,
     )
+
+
+async def _handle_order_back_command(
+    db: AsyncSession,
+    msg: ParsedMessage,
+    conversation,
+    active_order,
+    client_name: str | None,
+) -> WebhookResponse:
+    """Volta uma etapa dentro do fluxo de pedido sem cancelar o rascunho."""
+    previous_step = _previous_order_step(conversation.state, active_order)
+
+    if previous_step is None:
+        return await _cancel_order_and_return_to_menu(
+            db=db,
+            msg=msg,
+            conversation=conversation,
+            active_order=active_order,
+            client_name=client_name,
+            command="voltar",
+            intro="Voce estava no comeco do pedido, entao cancelei o rascunho e voltei para o menu principal.",
+        )
+
+    previous_state, action_code = previous_step
+    ctx = await _prepare_back_context(db, previous_state, action_code, active_order)
+    responses = [ResponseItem(text="Voltando uma etapa.")]
+    responses.extend(build_response(
+        action_code=action_code,
+        ctx=ctx,
+        current_state=previous_state,
+        client_name=client_name,
+    ))
+
+    await conv_repo.update_conversation_state(
+        db,
+        conversation.id,
+        new_state=previous_state,
+        active_flow=ActiveFlowType.PEDIDO,
+        fallback_count=0,
+    )
+    await event_repo.log_event(
+        db,
+        EventTypeEnum.STATE_CHANGED,
+        conversation_id=conversation.id,
+        order_id=active_order.id,
+        payload={
+            "from": conversation.state.value,
+            "to": previous_state.value,
+            "trigger": "ORDER_BACK",
+            "command": "voltar",
+            "action": action_code.value,
+        },
+    )
+    await db.commit()
+
+    if ctx.media_references:
+        try:
+            media_items = await media_service.resolve_media_items(db, ctx.media_references)
+            if media_items:
+                await media_service.send_media_items(msg.phone, media_items)
+        except Exception as exc:
+            logger.error("media_send_failed", error=str(exc), phone=msg.phone[:6] + "***")
+            await event_repo.log_event(
+                db,
+                EventTypeEnum.ERROR,
+                conversation_id=conversation.id,
+                order_id=active_order.id,
+                payload={"error": "Failed to send catalog media on back", "detail": str(exc)[:240]},
+            )
+            await db.commit()
+
+    for resp in responses:
+        if resp.type == "text" and resp.text:
+            await evo_client.send_text(msg.phone, resp.text)
+        elif resp.type == "media" and resp.media_url:
+            await evo_client.send_media(
+                msg.phone, resp.media_url, resp.caption, resp.media_type or "image"
+            )
+
+    return WebhookResponse(
+        status="ok",
+        message="Order step back",
+        processed=True,
+    )
+
+
+async def _cancel_order_and_return_to_menu(
+    db: AsyncSession,
+    msg: ParsedMessage,
+    conversation,
+    active_order,
+    client_name: str | None,
+    command: str,
+    intro: str,
+) -> WebhookResponse:
+    """Cancela o rascunho ativo e retorna ao menu."""
+    ctx = ActionContext()
+    await order_repo.cancel_order(db, active_order.id)
+    await event_repo.log_event(
+        db,
+        EventTypeEnum.ORDER_CANCELLED,
+        conversation_id=conversation.id,
+        order_id=active_order.id,
+        payload={"reason": "client_navigation_cancel", "command": command},
+    )
+    await conv_repo.update_conversation_state(
+        db,
+        conversation.id,
+        new_state=ConversationState.MENU_PRINCIPAL,
+        active_flow=ActiveFlowType.MENU,
+        fallback_count=0,
+    )
+    await event_repo.log_event(
+        db,
+        EventTypeEnum.STATE_CHANGED,
+        conversation_id=conversation.id,
+        order_id=active_order.id,
+        payload={
+            "from": conversation.state.value,
+            "to": ConversationState.MENU_PRINCIPAL.value,
+            "trigger": "GLOBAL_NAVIGATION",
+            "command": command,
+        },
+    )
+    await db.commit()
+
+    responses = [ResponseItem(text=intro)]
+    responses.extend(build_response(
+        action_code=SmActionEnum.SHOW_MENU,
+        ctx=ctx,
+        current_state=ConversationState.MENU_PRINCIPAL,
+        client_name=client_name,
+    ))
+    for resp in responses:
+        if resp.type == "text" and resp.text:
+            await evo_client.send_text(msg.phone, resp.text)
+
+    return WebhookResponse(
+        status="ok",
+        message=f"Navigation command: {command}",
+        processed=True,
+    )
+
+
+def _previous_order_step(
+    state: ConversationState,
+    active_order,
+) -> tuple[ConversationState, SmActionEnum] | None:
+    """Mapeia o estado atual do pedido para a etapa anterior."""
+    if state == ConversationState.ESCOLHENDO_TAMANHO:
+        return None
+    if state == ConversationState.ESCOLHENDO_MASSA:
+        return ConversationState.ESCOLHENDO_TAMANHO, SmActionEnum.CREATE_ORDER_AND_ASK_SIZE
+    if state == ConversationState.ESCOLHENDO_RECHEIOS:
+        return ConversationState.ESCOLHENDO_MASSA, SmActionEnum.SAVE_SIZE_AND_ASK_DOUGH
+    if state == ConversationState.ESCOLHENDO_RECHEIO_2:
+        return ConversationState.ESCOLHENDO_RECHEIOS, SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1
+    if state == ConversationState.ESCOLHENDO_ADICIONAIS:
+        if int(getattr(active_order, "filling_count", 1) or 1) >= 2:
+            return ConversationState.ESCOLHENDO_RECHEIO_2, SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2
+        return ConversationState.ESCOLHENDO_RECHEIOS, SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1
+    if state == ConversationState.ESCOLHENDO_FINALIZACAO:
+        return ConversationState.ESCOLHENDO_ADICIONAIS, SmActionEnum.SAVE_FILLING_AND_ASK_EXTRAS
+    if state == ConversationState.DEFININDO_DATA:
+        return ConversationState.ESCOLHENDO_FINALIZACAO, SmActionEnum.SAVE_EXTRAS_AND_ASK_FINISH
+    if state == ConversationState.DEFININDO_HORARIO:
+        return ConversationState.DEFININDO_DATA, SmActionEnum.SAVE_FINISH_AND_ASK_DATE
+    if state == ConversationState.DEFININDO_OBSERVACOES:
+        return ConversationState.DEFININDO_HORARIO, SmActionEnum.SAVE_DATE_AND_ASK_TIME
+    if state == ConversationState.CONFIRMANDO_PEDIDO:
+        return ConversationState.DEFININDO_OBSERVACOES, SmActionEnum.SAVE_TIME_AND_ASK_NOTES
+    return None
+
+
+async def _prepare_back_context(
+    db: AsyncSession,
+    previous_state: ConversationState,
+    action_code: SmActionEnum,
+    active_order,
+) -> ActionContext:
+    """Carrega os dados necessarios para reconstruir a pergunta da etapa anterior."""
+    ctx = ActionContext()
+
+    if previous_state == ConversationState.ESCOLHENDO_TAMANHO:
+        ctx.catalog_items = await catalog_repo.get_active_sizes(db)
+        ctx.media_references = ["CARDAPIO_1R", "CARDAPIO_2R"]
+    elif previous_state == ConversationState.ESCOLHENDO_MASSA:
+        size_id = getattr(active_order, "size_id", None)
+        if size_id:
+            ctx.order_data["size"] = await catalog_repo.get_size_by_id(db, size_id)
+    elif previous_state in {ConversationState.ESCOLHENDO_RECHEIOS, ConversationState.ESCOLHENDO_RECHEIO_2}:
+        ctx.catalog_items = await catalog_repo.get_active_fillings(db)
+        ctx.media_references = ["RECHEIOS"]
+    elif previous_state == ConversationState.ESCOLHENDO_ADICIONAIS:
+        ctx.catalog_items = await catalog_repo.get_active_extras(db)
+    elif previous_state == ConversationState.ESCOLHENDO_FINALIZACAO:
+        ctx.catalog_items = await catalog_repo.get_active_finishes(db)
+    elif previous_state == ConversationState.DEFININDO_HORARIO:
+        ctx.catalog_items = await catalog_repo.get_active_time_slots(db)
+
+    return ctx
 
 
 async def _load_catalog_for_state(db: AsyncSession, state: ConversationState) -> list:

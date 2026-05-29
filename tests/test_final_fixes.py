@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import date
 from uuid import uuid4
 
-from app.models import Availability, ConversationState, EventTypeEnum, OrderStatus, Order
+from app.models import Availability, ConversationState, EventTypeEnum, OrderStatus, Order, SmActionEnum
 from app.repositories.availability import check_date_available, increment_confirmed_orders
 from app.core.order_engine import _handle_create_order
-from app.services.message_service import execute_action
+from app.services.message_service import execute_action, _previous_order_step
 
 
 class TestAvailabilityFixes:
@@ -193,3 +193,44 @@ class TestNeedsApprovalFix:
             # 4. Verifica se mock_build não foi chamado, já que o fluxo de aprovação é hardcoded
             mock_build.assert_not_called()
 
+
+class TestOrderBackNavigation:
+    def test_back_from_dough_returns_to_size(self):
+        order = MagicMock()
+        order.filling_count = None
+
+        result = _previous_order_step(ConversationState.ESCOLHENDO_MASSA, order)
+
+        assert result == (
+            ConversationState.ESCOLHENDO_TAMANHO,
+            SmActionEnum.CREATE_ORDER_AND_ASK_SIZE,
+        )
+
+    def test_back_from_extras_with_two_fillings_returns_to_second_filling(self):
+        order = MagicMock()
+        order.filling_count = 2
+
+        result = _previous_order_step(ConversationState.ESCOLHENDO_ADICIONAIS, order)
+
+        assert result == (
+            ConversationState.ESCOLHENDO_RECHEIO_2,
+            SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2,
+        )
+
+    def test_back_from_extras_with_one_filling_returns_to_first_filling(self):
+        order = MagicMock()
+        order.filling_count = 1
+
+        result = _previous_order_step(ConversationState.ESCOLHENDO_ADICIONAIS, order)
+
+        assert result == (
+            ConversationState.ESCOLHENDO_RECHEIOS,
+            SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1,
+        )
+
+    def test_back_from_first_order_step_has_no_previous_step(self):
+        order = MagicMock()
+
+        result = _previous_order_step(ConversationState.ESCOLHENDO_TAMANHO, order)
+
+        assert result is None
