@@ -129,44 +129,73 @@ def _build_search_menu(ctx, name):
 
 def _build_show_sizes(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     sizes = ctx.catalog_items
+    
+    # Text fallback or short prefix
+    prefix = ""
     if sizes:
-        text = "📋 *Tamanhos disponíveis (bolos com 2 recheios):*\n\n"
-        for i, s in enumerate(sizes, 1):
-            text += (
-                f"{i}. {s.description}\n"
-                f"   {s.shape.value} • {s.servings} fatias\n"
-                f"   Branca: R$ {s.price_white} | Chocolate: R$ {s.price_chocolate}\n\n"
-            )
-        items.append(ResponseItem(text=text))
-    items.append(ResponseItem(text="Voltando ao menu principal... ⬅️"))
-    items.extend(_build_menu(ctx, name))
+        if has_media:
+            prefix = "📋 *Tamanhos disponíveis (bolos com 2 recheios):*\n\n"
+        else:
+            prefix = "📋 *Tamanhos disponíveis (bolos com 2 recheios):*\n\n"
+            for i, s in enumerate(sizes, 1):
+                prefix += (
+                    f"{i}. {s.description}\n"
+                    f"   {s.shape.value} • {s.servings} fatias\n"
+                    f"   Branca: R$ {s.price_white} | Chocolate: R$ {s.price_chocolate}\n\n"
+                )
+    
+    menu_items = _build_menu(ctx, name)
+    if menu_items:
+        menu_items[0].text = prefix + "⬅️ Voltando ao menu principal...\n\n" + menu_items[0].text
+        items.extend(menu_items)
+        
     return items
 
 
 def _build_show_fillings(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     fillings = ctx.catalog_items
+    
+    prefix = ""
     if fillings:
-        text = "🎂 *Recheios disponíveis:*\n\n"
-        for i, f in enumerate(fillings, 1):
-            text += f"{i}. {f.name}\n"
-        items.append(ResponseItem(text=text))
-    items.append(ResponseItem(text="Voltando ao menu principal... ⬅️"))
-    items.extend(_build_menu(ctx, name))
+        if has_media:
+            prefix = "🎂 *Recheios disponíveis:*\n\n"
+        else:
+            prefix = "🎂 *Recheios disponíveis:*\n\n"
+            for i, f in enumerate(fillings, 1):
+                prefix += f"{i}. {f.name}\n"
+            prefix += "\n"
+            
+    menu_items = _build_menu(ctx, name)
+    if menu_items:
+        menu_items[0].text = prefix + "⬅️ Voltando ao menu principal...\n\n" + menu_items[0].text
+        items.extend(menu_items)
+        
     return items
 
 
 def _build_show_sweets(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     sweets = ctx.catalog_items
+    
+    prefix = ""
     if sweets:
-        text = "🍬 *Mini Docinhos:*\n\n"
-        for s in sweets:
-            text += f"• {s.name}\n  {s.unit_quantity} un: R$ {s.price} (mín: {s.min_order_qty} un)\n\n"
-        items.append(ResponseItem(text=text))
-    items.append(ResponseItem(text="Voltando ao menu principal... ⬅️"))
-    items.extend(_build_menu(ctx, name))
+        if has_media:
+            prefix = "🍬 *Mini Docinhos:*\n\n"
+        else:
+            prefix = "🍬 *Mini Docinhos:*\n\n"
+            for s in sweets:
+                prefix += f"• {s.name}\n  {s.unit_quantity} un: R$ {s.price} (mín: {s.min_order_qty} un)\n\n"
+
+    menu_items = _build_menu(ctx, name)
+    if menu_items:
+        menu_items[0].text = prefix + "⬅️ Voltando ao menu principal...\n\n" + menu_items[0].text
+        items.extend(menu_items)
+        
     return items
 
 
@@ -198,15 +227,20 @@ def _build_show_values(ctx, name):
 
 def _build_ask_size(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     sizes = ctx.catalog_items
-    text = "🎂 *Vamos montar seu bolo com 2 recheios!*\n\nEscolha o tamanho:\n\n"
-    for i, s in enumerate(sizes, 1):
-        text += (
-            f"*{i}.* {s.description}\n"
-            f"    {s.shape.value} • {s.servings} fatias\n"
-            f"    Branca: R$ {s.price_white} | Choc: R$ {s.price_chocolate}\n\n"
-        )
-    text += "📝 _Digite o número do tamanho desejado._"
+    
+    if has_media:
+        text = "🎂 *Vamos montar seu bolo com 2 recheios!*\n\nEscolha o tamanho do bolo respondendo com o número que aparece na imagem."
+    else:
+        text = "🎂 *Vamos montar seu bolo com 2 recheios!*\n\nEscolha o tamanho:\n\n"
+        for i, s in enumerate(sizes, 1):
+            text += (
+                f"*{i}.* {s.description}\n"
+                f"    {s.shape.value} • {s.servings} fatias\n"
+                f"    Branca: R$ {s.price_white} | Choc: R$ {s.price_chocolate}\n\n"
+            )
+        text += "📝 _Digite o número do tamanho desejado._"
     items.append(ResponseItem(text=text))
     return items
 
@@ -227,22 +261,32 @@ def _build_ask_dough(ctx, name):
 
 def _build_ask_filling(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     fillings = ctx.catalog_items
-    text = "✅ Massa selecionada!\n\nEscolha o *1º recheio*:\n\n"
-    for i, f in enumerate(fillings, 1):
-        text += f"*{i}.* {f.name}\n"
-    text += "\n📝 _Digite o número ou o nome do recheio._"
+    
+    if has_media:
+        text = "✅ Massa selecionada!\n\nEscolha o 1º recheio respondendo com o número ou nome que aparece na imagem."
+    else:
+        text = "✅ Massa selecionada!\n\nEscolha o *1º recheio*:\n\n"
+        for i, f in enumerate(fillings, 1):
+            text += f"*{i}.* {f.name}\n"
+        text += "\n📝 _Digite o número ou o nome do recheio._"
     items.append(ResponseItem(text=text))
     return items
 
 
 def _build_ask_filling2(ctx, name):
     items = _media_items(ctx)
+    has_media = bool(ctx.media_references)
     fillings = ctx.catalog_items
-    text = "✅ 1º recheio selecionado!\n\nAgora escolha o *2º recheio*:\n\n"
-    for i, f in enumerate(fillings, 1):
-        text += f"*{i}.* {f.name}\n"
-    text += "\n📝 _Digite o número ou o nome do recheio._"
+    
+    if has_media:
+        text = "✅ 1º recheio selecionado!\n\nAgora escolha o 2º recheio respondendo com o número ou nome que aparece na imagem."
+    else:
+        text = "✅ 1º recheio selecionado!\n\nAgora escolha o *2º recheio*:\n\n"
+        for i, f in enumerate(fillings, 1):
+            text += f"*{i}.* {f.name}\n"
+        text += "\n📝 _Digite o número ou o nome do recheio._"
     items.append(ResponseItem(text=text))
     return items
 
