@@ -161,3 +161,13 @@ O banco PostgreSQL **não é alterado** por esta API. O schema é o mesmo usado 
 ## Licença
 
 Projeto privado — Dani Bolos / Think Systems.
+
+## Regra atual do catalogo
+
+A Dani Bolos trabalha somente com bolos de **2 recheios**. A API filtra o catalogo para exibir e aceitar apenas registros de `sizes.filling_layers = 2`.
+
+Para alinhar o banco de producao/homologacao e esconder os itens antigos de 1 recheio, execute:
+
+```bash
+psql "$DATABASE_URL" -f scripts/20260529_only_two_fillings.sql
+```

@@ -243,17 +243,13 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
         else:
             trigger = SmTriggerEnum.DATE_AVAILABLE
 
-    # Caso especial: recheio — determinar trigger de camadas
+    # Caso especial: todo bolo do fluxo atual tem 2 recheios.
     if (
         conversation.state == ConversationState.ESCOLHENDO_RECHEIOS
         and trigger == SmTriggerEnum.INPUT_VALID
         and active_order
     ):
-        filling_count = active_order.filling_count or 1
-        if filling_count >= 2:
-            trigger = SmTriggerEnum.TWO_FILLINGS_SELECTED
-        else:
-            trigger = SmTriggerEnum.ONE_FILLING_SELECTED
+        trigger = SmTriggerEnum.TWO_FILLINGS_SELECTED
 
     transition = await resolve_transition(db, conversation, trigger)
 
@@ -690,9 +686,7 @@ def _previous_order_step(
     if state == ConversationState.ESCOLHENDO_RECHEIO_2:
         return ConversationState.ESCOLHENDO_RECHEIOS, SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1
     if state == ConversationState.ESCOLHENDO_ADICIONAIS:
-        if int(getattr(active_order, "filling_count", 1) or 1) >= 2:
-            return ConversationState.ESCOLHENDO_RECHEIO_2, SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2
-        return ConversationState.ESCOLHENDO_RECHEIOS, SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1
+        return ConversationState.ESCOLHENDO_RECHEIO_2, SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2
     if state == ConversationState.ESCOLHENDO_FINALIZACAO:
         return ConversationState.ESCOLHENDO_ADICIONAIS, SmActionEnum.SAVE_FILLING_AND_ASK_EXTRAS
     if state == ConversationState.DEFININDO_DATA:
@@ -717,7 +711,7 @@ async def _prepare_back_context(
 
     if previous_state == ConversationState.ESCOLHENDO_TAMANHO:
         ctx.catalog_items = await catalog_repo.get_active_sizes(db)
-        ctx.media_references = ["CARDAPIO_1R", "CARDAPIO_2R"]
+        ctx.media_references = ["CARDAPIO_2R"]
     elif previous_state == ConversationState.ESCOLHENDO_MASSA:
         size_id = getattr(active_order, "size_id", None)
         if size_id:

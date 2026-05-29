@@ -300,7 +300,7 @@ async def _handle_show_sizes(db, ctx, conversation_id, client_id, classification
     """Mostra tamanhos e volta ao menu."""
     sizes = await catalog_repo.get_active_sizes(db)
     ctx.catalog_items = sizes
-    ctx.media_references = ["CARDAPIO_1R", "CARDAPIO_2R"]
+    ctx.media_references = ["CARDAPIO_2R"]
 
 
 async def _handle_show_fillings(db, ctx, conversation_id, client_id, classification, order_id):
@@ -395,7 +395,7 @@ async def _handle_create_order(db, ctx, conversation_id, client_id, classificati
     sizes = await catalog_repo.get_active_sizes(db)
     ctx.catalog_items = sizes
     ctx.order_data["order_id"] = str(order.id)
-    ctx.media_references = ["CARDAPIO_1R", "CARDAPIO_2R"]
+    ctx.media_references = ["CARDAPIO_2R"]
 
 
 async def _handle_save_size(db, ctx, conversation_id, client_id, classification, order_id):
@@ -414,7 +414,7 @@ async def _handle_save_size(db, ctx, conversation_id, client_id, classification,
         db, order_id,
         size_id=size.id,
         shape=CakeShape(size.shape.value),
-        filling_count=size.filling_layers,
+        filling_count=2,
         base_value=Decimal(str(size.price_white)),
     )
     await event_repo.log_event(
@@ -424,7 +424,7 @@ async def _handle_save_size(db, ctx, conversation_id, client_id, classification,
         payload={"size_id": size.id, "description": size.description},
     )
     ctx.order_data["size"] = size
-    ctx.order_data["filling_layers"] = size.filling_layers
+    ctx.order_data["filling_layers"] = 2
 
 
 async def _handle_save_dough(db, ctx, conversation_id, client_id, classification, order_id):
@@ -526,7 +526,7 @@ async def _handle_save_extras(db, ctx, conversation_id, client_id, classificatio
                 # Marcar status de alerta para o message_service poder lidar se necessário
                 return
 
-            max_layers = max(1, int(order.filling_count or 1))
+            max_layers = max(1, int(order.filling_count or 2))
             requested_layers = classification.extra_data.get("layers")
             layers = max_layers
             if requested_layers:

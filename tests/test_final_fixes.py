@@ -217,15 +217,15 @@ class TestOrderBackNavigation:
             SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2,
         )
 
-    def test_back_from_extras_with_one_filling_returns_to_first_filling(self):
+    def test_back_from_extras_ignores_legacy_one_filling_and_returns_to_second_filling(self):
         order = MagicMock()
         order.filling_count = 1
 
         result = _previous_order_step(ConversationState.ESCOLHENDO_ADICIONAIS, order)
 
         assert result == (
-            ConversationState.ESCOLHENDO_RECHEIOS,
-            SmActionEnum.SAVE_DOUGH_AND_ASK_FILLING1,
+            ConversationState.ESCOLHENDO_RECHEIO_2,
+            SmActionEnum.SAVE_FILLING1_AND_ASK_FILLING2,
         )
 
     def test_back_from_first_order_step_has_no_previous_step(self):

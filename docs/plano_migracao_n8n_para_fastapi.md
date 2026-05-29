@@ -51,6 +51,16 @@ n8n → cron jobs → timeout/locks
 
 **Nenhuma alteração no schema.** A FastAPI usa as mesmas tabelas e enums que o n8n consultava. Os modelos SQLAlchemy são mapeamento puro do schema existente.
 
+### Catalogo somente com 2 recheios
+
+A regra comercial atual remove bolos de 1 recheio do fluxo. A API filtra `sizes.filling_layers = 2` e o banco deve ser alinhado com:
+
+```bash
+psql "$DATABASE_URL" -f scripts/20260529_only_two_fillings.sql
+```
+
+Esse script desativa tamanhos antigos de 1 recheio e a midia `CARDAPIO_1R`, sem alterar o schema.
+
 ## Rollback
 
 Se necessário reverter:

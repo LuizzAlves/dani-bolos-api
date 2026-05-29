@@ -13,10 +13,14 @@ from app.models import (
 # --- Sizes ---
 
 async def get_active_sizes(db: AsyncSession) -> list[Size]:
-    """Retorna tamanhos ativos ordenados."""
+    """Retorna tamanhos ativos ordenados.
+
+    Dani Bolos trabalha somente com bolos de 2 recheios; tamanhos antigos de
+    1 recheio ficam fora do fluxo mesmo se ainda existirem no banco.
+    """
     result = await db.execute(
         select(Size)
-        .where(Size.active == True)
+        .where(Size.active == True, Size.filling_layers == 2)
         .order_by(Size.sort_order)
     )
     return list(result.scalars().all())
@@ -24,7 +28,11 @@ async def get_active_sizes(db: AsyncSession) -> list[Size]:
 
 async def get_size_by_id(db: AsyncSession, size_id: int) -> Size | None:
     result = await db.execute(
-        select(Size).where(Size.id == size_id, Size.active == True)
+        select(Size).where(
+            Size.id == size_id,
+            Size.active == True,
+            Size.filling_layers == 2,
+        )
     )
     return result.scalar_one_or_none()
 

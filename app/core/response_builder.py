@@ -131,11 +131,10 @@ def _build_show_sizes(ctx, name):
     items = _media_items(ctx)
     sizes = ctx.catalog_items
     if sizes:
-        text = "📋 *Tamanhos disponíveis:*\n\n"
+        text = "📋 *Tamanhos disponíveis (bolos com 2 recheios):*\n\n"
         for i, s in enumerate(sizes, 1):
-            layers = f" ({s.filling_layers} recheio{'s' if s.filling_layers > 1 else ''})" if hasattr(s, 'filling_layers') else ""
             text += (
-                f"{i}. {s.description}{layers}\n"
+                f"{i}. {s.description}\n"
                 f"   {s.shape.value} • {s.servings} fatias\n"
                 f"   Branca: R$ {s.price_white} | Chocolate: R$ {s.price_chocolate}\n\n"
             )
@@ -200,11 +199,10 @@ def _build_show_values(ctx, name):
 def _build_ask_size(ctx, name):
     items = _media_items(ctx)
     sizes = ctx.catalog_items
-    text = "🎂 *Vamos montar seu bolo!*\n\nEscolha o tamanho:\n\n"
+    text = "🎂 *Vamos montar seu bolo com 2 recheios!*\n\nEscolha o tamanho:\n\n"
     for i, s in enumerate(sizes, 1):
-        layers = f" ({s.filling_layers} recheio{'s' if s.filling_layers > 1 else ''})"
         text += (
-            f"*{i}.* {s.description}{layers}\n"
+            f"*{i}.* {s.description}\n"
             f"    {s.shape.value} • {s.servings} fatias\n"
             f"    Branca: R$ {s.price_white} | Choc: R$ {s.price_chocolate}\n\n"
         )
@@ -257,7 +255,7 @@ def _build_ask_extras(ctx, name):
         text += f"*{i}.* {e.name}{price_info}\n"
     text += "\n*0.* Sem adicionais (pular)\n"
     text += (
-        "\n📝 _Digite o número ou nome do adicional e em quantas camadas._\n"
+        "\n📝 _Digite o número ou nome do adicional e informe se quer em 1 ou 2 camadas._\n"
         "Exemplos: *1 em 1 camada*, *cereja em 2 camadas* ou *pular*."
     )
     return [ResponseItem(text=text)]
