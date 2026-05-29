@@ -149,7 +149,8 @@ class TestGoogleSheetsService:
             extras_value=15.00,
             total_value=115.50,
             notes="Retirada por: Maria\nObservações: Teste nota",
-            created_at=datetime(2026, 5, 28, 14, 0)
+            created_at=datetime(2026, 5, 28, 14, 0),
+            updated_at=datetime(2026, 5, 28, 15, 30),
         )
         
         mock_result = MagicMock()
@@ -182,6 +183,18 @@ class TestGoogleSheetsService:
         assert payload["extras_value"] == 15.0
         assert payload["total_value"] == 115.5
         assert payload["notes"] == "Teste nota"
+        assert payload["row_values"] == [
+            "2026-06-01",
+            "14:30",
+            100,
+            "Teste",
+            "551999999999",
+            "AGUARDANDO_CONFIRMACAO",
+            115.5,
+            "Teste nota",
+            str(order_id),
+            "2026-05-28T15:30:00",
+        ]
 
     @pytest.mark.asyncio
     @patch("app.services.google_sheets_service.sheets_client.send_to_webhook")

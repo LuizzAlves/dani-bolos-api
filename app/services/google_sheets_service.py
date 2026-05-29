@@ -80,12 +80,37 @@ async def upsert_order(db: AsyncSession, order_id: int) -> bool:
         # Monta payload com dados reais
         client = order.client
         pickup_person_name, clean_notes = _split_order_notes(order.notes)
+        order_id_text = str(order.id)
+        client_name = client.name or "Desconhecido"
+        phone = client.phone
+        status = order.status.value if order.status else "DESCONHECIDO"
+        pickup_date = order.pickup_date.strftime("%Y-%m-%d") if order.pickup_date else None
+        pickup_time = order.pickup_time.strftime("%H:%M") if order.pickup_time else None
+        total_value = float(order.total_value) if order.total_value else 0.0
+        updated_at = order.updated_at.isoformat() if order.updated_at else None
+
+        # Ordem oficial da aba "Pedidos":
+        # Data de Retirada | Horário de Retirada | Número do Pedido | Nome do Cliente |
+        # Telefone | Status | Valor Total | Observações | ID do Pedido | Atualizado em
+        row_values = [
+            pickup_date,
+            pickup_time,
+            order.order_number,
+            client_name,
+            phone,
+            status,
+            total_value,
+            clean_notes,
+            order_id_text,
+            updated_at,
+        ]
+
         payload = {
-            "order_id": str(order.id),
+            "order_id": order_id_text,
             "order_number": order.order_number,
-            "status": order.status.value if order.status else "DESCONHECIDO",
-            "client_name": client.name or "Desconhecido",
-            "phone": client.phone,
+            "status": status,
+            "client_name": client_name,
+            "phone": phone,
             "pickup_person_name": pickup_person_name,
             "size": order.size.description if order.size else None,
             "dough": order.dough.value if order.dough else None,
@@ -101,14 +126,16 @@ async def upsert_order(db: AsyncSession, order_id: int) -> bool:
                 if oe.extra
             ] if order.order_extras else [],
             "finish": order.finish.name if order.finish else None,
-            "pickup_date": order.pickup_date.strftime("%Y-%m-%d") if order.pickup_date else None,
-            "pickup_time": order.pickup_time.strftime("%H:%M") if order.pickup_time else None,
+            "pickup_date": pickup_date,
+            "pickup_time": pickup_time,
             "notes": clean_notes,
             "summary": _format_order_summary(order),
             "base_value": float(order.base_value) if order.base_value else 0.0,
             "extras_value": float(order.extras_value) if order.extras_value else 0.0,
-            "total_value": float(order.total_value) if order.total_value else 0.0,
+            "total_value": total_value,
             "submitted_at": order.created_at.isoformat() if order.created_at else None,
+            "updated_at": updated_at,
+            "row_values": row_values,
         }
 
         # Envia
