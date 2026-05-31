@@ -25,6 +25,7 @@ COPY --from=builder /install /usr/local
 # Copiar código
 COPY app/ ./app/
 COPY dashboard/ ./dashboard/
+COPY scripts/ ./scripts/
 COPY tests/ ./tests/
 
 # Variáveis de ambiente padrão
