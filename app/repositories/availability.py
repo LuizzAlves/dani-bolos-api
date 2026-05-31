@@ -77,3 +77,68 @@ async def increment_confirmed_orders(db: AsyncSession, target_date: date) -> boo
     )
     await db.flush()
     return result.rowcount > 0
+
+
+# ============================================================
+# FUNÇÕES DO DASHBOARD ADMINISTRATIVO
+# ============================================================
+
+async def get_month_availability(
+    db: AsyncSession, year: int, month: int
+) -> list[Availability]:
+    """Retorna todos os registros de disponibilidade do mês."""
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month + 1, 1)
+
+    result = await db.execute(
+        select(Availability)
+        .where(Availability.date >= start, Availability.date < end)
+        .order_by(Availability.date)
+    )
+    return list(result.scalars().all())
+
+
+async def upsert_availability(
+    db: AsyncSession,
+    target_date: date,
+    max_orders: int | None = None,
+    blocked: bool | None = None,
+    block_reason: str | None = None,
+) -> Availability:
+    """Cria ou atualiza disponibilidade de um dia."""
+    result = await db.execute(
+        select(Availability).where(Availability.date == target_date)
+    )
+    avail = result.scalar_one_or_none()
+
+    if avail is None:
+        avail = Availability(
+            date=target_date,
+            max_orders=max_orders if max_orders is not None else 5,
+            blocked=blocked if blocked is not None else False,
+            block_reason=block_reason,
+        )
+        db.add(avail)
+    else:
+        if max_orders is not None:
+            avail.max_orders = max_orders
+        if blocked is not None:
+            avail.blocked = blocked
+        if block_reason is not None:
+            avail.block_reason = block_reason
+
+    await db.flush()
+    return avail
+
+
+async def block_date(db: AsyncSession, target_date: date, reason: str | None = None) -> None:
+    """Bloqueia uma data."""
+    await upsert_availability(db, target_date, blocked=True, block_reason=reason)
+
+
+async def unblock_date(db: AsyncSession, target_date: date) -> None:
+    """Desbloqueia uma data."""
+    await upsert_availability(db, target_date, blocked=False, block_reason=None)

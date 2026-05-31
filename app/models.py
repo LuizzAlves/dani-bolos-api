@@ -314,7 +314,7 @@ class Order(Base):
     id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     order_number = mapped_column(Integer, unique=True, autoincrement=True)
     client_id = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="RESTRICT"), nullable=False)
-    conversation_id = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="RESTRICT"), nullable=False)
+    conversation_id = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="RESTRICT"), nullable=True)
     status = mapped_column(
         Enum(OrderStatus, name="order_status", create_type=False),
         nullable=False,
@@ -458,4 +458,53 @@ class StateTransition(Base):
     description = mapped_column(String(255), nullable=True)
     is_active = mapped_column(Boolean, nullable=False, default=True)
     created_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+    updated_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+
+
+# ============================================================
+# ENUM — Alertas
+# ============================================================
+
+class AlertTypeEnum(str, enum.Enum):
+    HUMAN_REQUESTED = "HUMAN_REQUESTED"
+    STUCK_CLIENT = "STUCK_CLIENT"
+    CUSTOM_FILLING = "CUSTOM_FILLING"
+    INTERPRETATION_ERROR = "INTERPRETATION_ERROR"
+    FLOW_ERROR = "FLOW_ERROR"
+    MAX_FALLBACK = "MAX_FALLBACK"
+
+
+# ============================================================
+# MODELOS — Dashboard Administrativo
+# ============================================================
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    client_id = mapped_column(UUID(as_uuid=True), ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    conversation_id = mapped_column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)
+    order_id = mapped_column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    alert_type = mapped_column(
+        Enum(AlertTypeEnum, name="alert_type_enum", create_type=False),
+        nullable=False,
+    )
+    title = mapped_column(String(255), nullable=False)
+    description = mapped_column(Text, nullable=True)
+    client_phone = mapped_column(String(20), nullable=True)
+    client_name = mapped_column(String(255), nullable=True)
+    last_message = mapped_column(Text, nullable=True)
+    resolved = mapped_column(Boolean, nullable=False, default=False)
+    resolved_at = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+
+    client = relationship("Client")
+    conversation = relationship("Conversation")
+
+
+class AdminSetting(Base):
+    __tablename__ = "admin_settings"
+
+    key = mapped_column(String(100), primary_key=True)
+    value = mapped_column(JSONB, nullable=False, default=dict)
     updated_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))

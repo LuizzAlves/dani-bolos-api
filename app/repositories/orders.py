@@ -2,13 +2,18 @@
 Repositório de pedidos.
 """
 
+from datetime import date, timedelta
 from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, joinedload
 
-from app.models import Order, OrderExtra, OrderStatus, CakeShape, DoughType
+from app.models import (
+    Order, OrderExtra, OrderStatus, CakeShape, DoughType,
+    Client, Size, Filling, Finish, Extra,
+)
 
 
 FIRST_ORDER_NUMBER = 1548
@@ -260,3 +265,211 @@ async def set_external_task(
         )
     )
     await db.flush()
+
+
+# ============================================================
+# FUNÇÕES DO DASHBOARD ADMINISTRATIVO
+# ============================================================
+
+async def list_orders_by_status(
+    db: AsyncSession,
+    statuses: list[OrderStatus],
+    limit: int = 200,
+    offset: int = 0,
+) -> list[Order]:
+    """Lista pedidos filtrados por status(es), para o Kanban."""
+    query = (
+        select(Order)
+        .options(
+            joinedload(Order.client),
+            joinedload(Order.size),
+            joinedload(Order.filling_1),
+            joinedload(Order.filling_2),
+            joinedload(Order.finish),
+            selectinload(Order.order_extras).joinedload(OrderExtra.extra),
+        )
+        .where(Order.status.in_(statuses))
+        .order_by(Order.pickup_date.asc().nullslast(), Order.pickup_time.asc().nullslast())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(query)
+    return list(result.unique().scalars().all())
+
+
+async def count_orders_by_date(
+    db: AsyncSession, year: int, month: int
+) -> list[dict]:
+    """Contagem de pedidos por dia do mês (para heatmap do calendário)."""
+    start = date(year, month, 1)
+    if month == 12:
+        end = date(year + 1, 1, 1)
+    else:
+        end = date(year, month + 1, 1)
+
+    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+    query = (
+        select(
+            Order.pickup_date,
+            func.count(Order.id).label("count"),
+        )
+        .where(
+            Order.pickup_date >= start,
+            Order.pickup_date < end,
+            Order.status.notin_(excluded),
+        )
+        .group_by(Order.pickup_date)
+    )
+    result = await db.execute(query)
+    return [{"date": str(row.pickup_date), "count": row.count} for row in result.all()]
+
+
+async def list_orders_by_date(
+    db: AsyncSession, target_date: date
+) -> list[Order]:
+    """Lista pedidos de uma data específica."""
+    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+    query = (
+        select(Order)
+        .options(
+            joinedload(Order.client),
+            joinedload(Order.size),
+            joinedload(Order.filling_1),
+            joinedload(Order.filling_2),
+            joinedload(Order.finish),
+        )
+        .where(
+            Order.pickup_date == target_date,
+            Order.status.notin_(excluded),
+        )
+        .order_by(Order.pickup_time.asc().nullslast())
+    )
+    result = await db.execute(query)
+    return list(result.unique().scalars().all())
+
+
+async def update_order_status(
+    db: AsyncSession, order_id: UUID, new_status: OrderStatus
+) -> bool:
+    """Muda o status de um pedido. Retorna True se encontrou."""
+    result = await db.execute(
+        update(Order)
+        .where(Order.id == order_id)
+        .values(status=new_status)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
+async def get_order_with_details(db: AsyncSession, order_id: UUID) -> Order | None:
+    """Retorna pedido com todos os JOINs para detalhes completos."""
+    query = (
+        select(Order)
+        .options(
+            joinedload(Order.client),
+            joinedload(Order.size),
+            joinedload(Order.filling_1),
+            joinedload(Order.filling_2),
+            joinedload(Order.finish),
+            selectinload(Order.order_extras).joinedload(OrderExtra.extra),
+        )
+        .where(Order.id == order_id)
+    )
+    result = await db.execute(query)
+    return result.unique().scalar_one_or_none()
+
+
+async def create_manual_order(
+    db: AsyncSession,
+    client_id: UUID,
+    size_id: int | None,
+    shape: CakeShape | None,
+    dough: DoughType | None,
+    filling_1_id: int | None,
+    filling_2_id: int | None,
+    finish_id: int | None,
+    pickup_date: date | None,
+    pickup_time=None,
+    notes: str | None = None,
+    base_value: Decimal | None = None,
+    extras_value: Decimal | None = None,
+    total_value: Decimal | None = None,
+    filling_count: int | None = None,
+) -> Order:
+    """Cria pedido manual (sem conversation_id)."""
+    order_number = await _next_order_number(db)
+    order = Order(
+        order_number=order_number,
+        client_id=client_id,
+        conversation_id=None,
+        status=OrderStatus.AGUARDANDO_CONFIRMACAO,
+        size_id=size_id,
+        shape=shape,
+        dough=dough,
+        filling_count=filling_count or 2,
+        filling_1_id=filling_1_id,
+        filling_2_id=filling_2_id,
+        finish_id=finish_id,
+        pickup_date=pickup_date,
+        pickup_time=pickup_time,
+        notes=notes,
+        base_value=base_value,
+        extras_value=extras_value or Decimal("0.00"),
+        total_value=total_value,
+    )
+    db.add(order)
+    await db.flush()
+    await db.refresh(order)
+    return order
+
+
+async def get_dashboard_stats(db: AsyncSession) -> dict:
+    """Métricas rápidas para o dashboard."""
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+
+    # Pedidos agendados para hoje
+    today_q = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.pickup_date == today,
+            Order.status.notin_(excluded),
+        )
+    )
+    today_count = today_q.scalar_one()
+
+    # Aguardando confirmação
+    aguardando_q = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.status == OrderStatus.AGUARDANDO_CONFIRMACAO,
+        )
+    )
+    aguardando_count = aguardando_q.scalar_one()
+
+    # Faturamento semanal
+    fat_q = await db.execute(
+        select(func.coalesce(func.sum(Order.total_value), 0)).where(
+            Order.pickup_date >= week_start,
+            Order.pickup_date <= today,
+            Order.status.notin_(excluded),
+        )
+    )
+    faturamento = fat_q.scalar_one()
+
+    # Pedidos amanhã
+    tomorrow = today + timedelta(days=1)
+    tomorrow_q = await db.execute(
+        select(func.count(Order.id)).where(
+            Order.pickup_date == tomorrow,
+            Order.status.notin_(excluded),
+        )
+    )
+    tomorrow_count = tomorrow_q.scalar_one()
+
+    return {
+        "today_count": today_count,
+        "aguardando_count": aguardando_count,
+        "faturamento_semanal": float(faturamento),
+        "tomorrow_count": tomorrow_count,
+    }

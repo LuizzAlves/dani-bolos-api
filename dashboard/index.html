@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Painel Administrativo Dani Bolos — Gestão de pedidos, agenda e catálogo.">
+    <title>Dani Bolos — Painel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/painel/static/style.css">
+</head>
+<body>
+
+    <!-- LOGIN OVERLAY -->
+    <div class="login-overlay" id="login-overlay">
+        <div class="login-card">
+            <div class="login-brand">
+                <span class="brand-icon">🎂</span>
+                <span class="brand-text">Dani Bolos</span>
+            </div>
+            <p class="login-subtitle">Painel Administrativo</p>
+            <div class="login-field">
+                <label for="login-token">Token de acesso</label>
+                <input type="password" id="login-token" placeholder="Cole seu token admin aqui" autocomplete="off">
+            </div>
+            <button class="btn btn--primary login-btn" id="login-btn">Entrar</button>
+            <p class="login-error" id="login-error"></p>
+        </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-icon">🎂</span>
+            <span class="brand-text">Dani Bolos</span>
+        </div>
+        <nav class="sidebar-nav">
+            <button class="nav-item active" data-tab="agenda" id="nav-agenda">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span class="nav-text">Agenda</span>
+            </button>
+            <button class="nav-item" data-tab="pedidos" id="nav-pedidos">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 14l2 2 4-4"/></svg>
+                <span class="nav-text">Pedidos</span>
+                <span class="nav-badge" id="badge-pedidos" style="display:none">0</span>
+            </button>
+            <button class="nav-item" data-tab="novo-pedido" id="nav-novo-pedido">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                <span class="nav-text">Novo Pedido</span>
+            </button>
+            <button class="nav-item" data-tab="alertas" id="nav-alertas">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                <span class="nav-text">Alertas</span>
+                <span class="nav-badge nav-badge--alert" id="badge-alertas" style="display:none">0</span>
+            </button>
+            <button class="nav-item" data-tab="config" id="nav-config">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                <span class="nav-text">Configurações</span>
+            </button>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">D</div>
+                <div class="user-details">
+                    <span class="user-name">Dani</span>
+                    <span class="user-role">Administradora</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+        <header class="header">
+            <button class="sidebar-toggle" id="sidebar-toggle">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="header-search">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Buscar pedido, cliente..." id="header-search-input">
+            </div>
+            <div class="header-actions">
+                <span class="header-date" id="header-date"></span>
+                <button class="btn btn--outline btn--sm header-logout" id="header-logout" title="Sair">⏻</button>
+            </div>
+        </header>
+
+        <div class="tab-content">
+
+            <!-- AGENDA / VISÃO GERAL -->
+            <section class="tab-panel active" id="tab-agenda">
+                <div class="page-title">
+                    <h1>📅 Agenda</h1>
+                    <p class="page-subtitle">Visão geral mensal e entregas do dia</p>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card metric-card--rose">
+                        <div class="metric-icon">🎂</div>
+                        <div class="metric-info">
+                            <span class="metric-value" id="m-hoje">—</span>
+                            <span class="metric-label">Pedidos Hoje</span>
+                        </div>
+                    </div>
+                    <div class="metric-card metric-card--amber">
+                        <div class="metric-icon">⏳</div>
+                        <div class="metric-info">
+                            <span class="metric-value" id="m-aguardando">—</span>
+                            <span class="metric-label">Pendências</span>
+                        </div>
+                    </div>
+                    <div class="metric-card metric-card--green">
+                        <div class="metric-icon">💰</div>
+                        <div class="metric-info">
+                            <span class="metric-value" id="m-faturamento">—</span>
+                            <span class="metric-label">Faturamento Semanal</span>
+                        </div>
+                    </div>
+                    <div class="metric-card metric-card--violet">
+                        <div class="metric-icon">📅</div>
+                        <div class="metric-info">
+                            <span class="metric-value" id="m-amanha">—</span>
+                            <span class="metric-label">Pedidos Amanhã</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="agenda-layout">
+                    <div class="card">
+                        <div class="calendar-nav">
+                            <button class="cal-nav-btn" id="cal-prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="15 18 9 12 15 6"/></svg></button>
+                            <h2 class="cal-month" id="cal-month-label"></h2>
+                            <button class="cal-nav-btn" id="cal-next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg></button>
+                        </div>
+                        <div class="calendar-grid" id="calendar-grid"></div>
+                    </div>
+                    <div class="card" id="day-detail">
+                        <div class="day-detail-header">
+                            <h2 id="day-detail-title">Selecione um dia</h2>
+                            <button class="btn btn--outline btn--sm" id="btn-block-day">🚫 Bloquear</button>
+                        </div>
+                        <div class="day-capacity">
+                            <span class="capacity-label">Capacidade:</span>
+                            <div class="capacity-controls">
+                                <button class="capacity-btn" id="cap-minus">−</button>
+                                <span class="capacity-value" id="cap-value">5</span>
+                                <button class="capacity-btn" id="cap-plus">+</button>
+                            </div>
+                            <div class="capacity-bar-wrap"><div class="capacity-bar" id="capacity-bar"></div></div>
+                            <span class="capacity-text" id="capacity-text">0 / 5 pedidos</span>
+                        </div>
+                        <div class="day-orders">
+                            <h3>Pedidos do dia</h3>
+                            <div class="day-orders-list" id="day-orders-list">
+                                <p class="empty-state">Selecione um dia no calendário</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PEDIDOS KANBAN -->
+            <section class="tab-panel" id="tab-pedidos">
+                <div class="page-title">
+                    <h1>📋 Gestão de Pedidos</h1>
+                    <p class="page-subtitle">Clique em um card para ver detalhes</p>
+                </div>
+                <div class="kanban-board" id="kanban-board">
+                    <div class="kanban-column" data-status="AGUARDANDO_CONFIRMACAO">
+                        <div class="kanban-column-header kh--amber"><span class="kanban-dot"></span><h3>Aguardando Confirmação</h3><span class="kanban-count" id="kc-aguardando">0</span></div>
+                        <div class="kanban-cards" id="kanban-aguardando"></div>
+                    </div>
+                    <div class="kanban-column" data-status="CONFIRMADOS_PRODUCAO">
+                        <div class="kanban-column-header kh--blue"><span class="kanban-dot"></span><h3>Em Produção / Confirmados</h3><span class="kanban-count" id="kc-producao">0</span></div>
+                        <div class="kanban-cards" id="kanban-producao"></div>
+                    </div>
+                    <div class="kanban-column" data-status="FINALIZADOS">
+                        <div class="kanban-column-header kh--green"><span class="kanban-dot"></span><h3>Finalizados</h3><span class="kanban-count" id="kc-finalizados">0</span></div>
+                        <div class="kanban-cards" id="kanban-finalizados"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- NOVO PEDIDO -->
+            <section class="tab-panel" id="tab-novo-pedido">
+                <div class="page-title">
+                    <h1>➕ Novo Pedido</h1>
+                    <p class="page-subtitle">Lançamento manual de pedido</p>
+                </div>
+                <div class="card new-order-card">
+                    <form id="new-order-form" class="new-order-form" autocomplete="off">
+                        <div class="form-section">
+                            <h3>👤 Cliente</h3>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-client-name">Nome *</label><input type="text" id="no-client-name" required></div>
+                                <div class="form-field"><label for="no-client-phone">Telefone *</label><input type="tel" id="no-client-phone" placeholder="5511999999999" required></div>
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <h3>🎂 Bolo</h3>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-size">Tamanho *</label><select id="no-size" required><option value="">Selecione...</option></select></div>
+                                <div class="form-field"><label for="no-dough">Massa *</label><select id="no-dough" required><option value="">Selecione...</option><option value="BRANCA">Branca</option><option value="CHOCOLATE">Chocolate</option></select></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-filling1">Recheio 1 *</label><select id="no-filling1" required><option value="">Selecione...</option></select></div>
+                                <div class="form-field"><label for="no-filling2">Recheio 2 *</label><select id="no-filling2" required><option value="">Selecione...</option></select></div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-finish">Finalização</label><select id="no-finish"><option value="">Selecione...</option></select></div>
+                                <div class="form-field"><label for="no-extras">Adicionais</label><select id="no-extras" multiple><option value="">Nenhum</option></select></div>
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <h3>📅 Retirada</h3>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-date">Data *</label><input type="date" id="no-date" required></div>
+                                <div class="form-field"><label for="no-time">Horário *</label><select id="no-time" required><option value="">Selecione...</option></select></div>
+                            </div>
+                        </div>
+                        <div class="form-section">
+                            <h3>💰 Detalhes</h3>
+                            <div class="form-row">
+                                <div class="form-field"><label for="no-value">Valor total (R$)</label><input type="number" id="no-value" step="0.01" min="0" placeholder="0,00"></div>
+                                <div class="form-field"><label for="no-notes">Observações</label><textarea id="no-notes" rows="2" placeholder="Tema, alergia, mensagem no bolo..."></textarea></div>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="reset" class="btn btn--outline">Limpar</button>
+                            <button type="submit" class="btn btn--primary">💾 Salvar Pedido</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ALERTAS -->
+            <section class="tab-panel" id="tab-alertas">
+                <div class="page-title">
+                    <h1>🔔 Central de Alertas</h1>
+                    <p class="page-subtitle">Situações que exigem atenção humana</p>
+                </div>
+                <div class="alerts-list" id="alerts-list">
+                    <div class="empty-state">
+                        <span class="empty-icon">✅</span>
+                        <p>Nenhum alerta pendente</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- CONFIGURAÇÕES -->
+            <section class="tab-panel" id="tab-config">
+                <div class="page-title"><h1>⚙️ Configurações</h1><p class="page-subtitle">Catálogo, horários e regras de negócio</p></div>
+
+                <!-- Controle de Fluxo (toggle rápido) -->
+                <div class="card flow-control-card">
+                    <div class="flow-control-row">
+                        <div>
+                            <h3>⚡ Controle de Fluxo</h3>
+                            <p class="flow-control-desc">Quando pausado, o sistema impede novos pedidos automáticos.</p>
+                        </div>
+                        <div class="flow-toggles">
+                            <div class="cfg-toggle-row">
+                                <label>Bot ativo</label>
+                                <label class="toggle"><input type="checkbox" id="cfg-bot-active" checked><span class="toggle-slider"></span></label>
+                            </div>
+                            <div class="cfg-toggle-row">
+                                <label>Receber pedidos</label>
+                                <label class="toggle"><input type="checkbox" id="cfg-orders-paused" checked><span class="toggle-slider"></span></label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-abas: Catálogo e Geral -->
+                <div class="catalog-tabs">
+                    <button class="catalog-tab active" data-catalog="tamanhos" id="ct-tamanhos">Tamanhos</button>
+                    <button class="catalog-tab" data-catalog="recheios" id="ct-recheios">Recheios</button>
+                    <button class="catalog-tab" data-catalog="adicionais" id="ct-adicionais">Adicionais</button>
+                    <button class="catalog-tab" data-catalog="finalizacoes" id="ct-finalizacoes">Finalizações</button>
+                    <button class="catalog-tab" data-catalog="docinhos" id="ct-docinhos">Docinhos</button>
+                    <button class="catalog-tab" data-catalog="geral" id="ct-geral">Geral</button>
+                </div>
+                <div class="catalog-content" id="catalog-content"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- MODAL -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal" id="order-modal">
+            <div class="modal-header">
+                <h2 id="modal-title">Pedido</h2>
+                <button class="modal-close" id="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body"></div>
+            <div class="modal-footer" id="modal-footer"></div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+    <script src="/painel/static/app.js"></script>
+</body>
+</html>

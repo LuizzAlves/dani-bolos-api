@@ -2,7 +2,7 @@
 Repositório de catálogo (sizes, fillings, extras, finishes, sweets, time_slots, catalog_media).
 """
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -153,3 +153,88 @@ async def get_catalog_medias(
         )
     )
     return list(result.scalars().all())
+
+
+# ============================================================
+# FUNÇÕES DO DASHBOARD ADMINISTRATIVO
+# ============================================================
+
+async def get_all_sizes(db: AsyncSession) -> list[Size]:
+    """Retorna todos os tamanhos (inclui inativos) para gestão."""
+    result = await db.execute(select(Size).order_by(Size.sort_order))
+    return list(result.scalars().all())
+
+
+async def get_all_fillings(db: AsyncSession) -> list[Filling]:
+    """Retorna todos os recheios (inclui indisponíveis)."""
+    result = await db.execute(select(Filling).order_by(Filling.sort_order))
+    return list(result.scalars().all())
+
+
+async def get_all_extras(db: AsyncSession) -> list[Extra]:
+    """Retorna todos os adicionais (inclui inativos)."""
+    result = await db.execute(select(Extra).order_by(Extra.sort_order))
+    return list(result.scalars().all())
+
+
+async def get_all_finishes(db: AsyncSession) -> list[Finish]:
+    """Retorna todas as finalizações (inclui inativas)."""
+    result = await db.execute(select(Finish).order_by(Finish.sort_order))
+    return list(result.scalars().all())
+
+
+async def get_all_sweets(db: AsyncSession) -> list[Sweet]:
+    """Retorna todos os docinhos (inclui inativos)."""
+    result = await db.execute(select(Sweet).order_by(Sweet.sort_order))
+    return list(result.scalars().all())
+
+
+async def get_all_time_slots(db: AsyncSession) -> list[TimeSlot]:
+    """Retorna todos os horários (inclui indisponíveis)."""
+    result = await db.execute(select(TimeSlot).order_by(TimeSlot.sort_order))
+    return list(result.scalars().all())
+
+
+async def update_size(db: AsyncSession, size_id: int, data: dict) -> bool:
+    """Atualiza campos de um tamanho."""
+    result = await db.execute(
+        update(Size).where(Size.id == size_id).values(**data)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
+async def update_filling(db: AsyncSession, filling_id: int, data: dict) -> bool:
+    """Atualiza campos de um recheio."""
+    result = await db.execute(
+        update(Filling).where(Filling.id == filling_id).values(**data)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
+async def update_extra(db: AsyncSession, extra_id: int, data: dict) -> bool:
+    """Atualiza campos de um adicional."""
+    result = await db.execute(
+        update(Extra).where(Extra.id == extra_id).values(**data)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
+async def update_finish(db: AsyncSession, finish_id: int, data: dict) -> bool:
+    """Atualiza campos de uma finalização."""
+    result = await db.execute(
+        update(Finish).where(Finish.id == finish_id).values(**data)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
+async def update_sweet(db: AsyncSession, sweet_id: int, data: dict) -> bool:
+    """Atualiza campos de um docinho."""
+    result = await db.execute(
+        update(Sweet).where(Sweet.id == sweet_id).values(**data)
+    )
+    await db.flush()
+    return result.rowcount > 0

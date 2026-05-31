@@ -16,7 +16,7 @@ from app.core.response_builder import build_response
 from app.core.semantic_translator import semantic_translate
 from app.models import (
     ConversationState, SmTriggerEnum, SmActionEnum,
-    EventTypeEnum, ActiveFlowType,
+    EventTypeEnum, ActiveFlowType, AlertTypeEnum,
     Client, Conversation, Order, OrderExtra, Event,
 )
 from app.repositories import (
@@ -26,6 +26,8 @@ from app.repositories import (
     events as event_repo,
     catalog as catalog_repo,
     availability as avail_repo,
+    settings as settings_repo,
+    alerts as alerts_repo,
 )
 from app.integrations import evolution as evo_client
 from app.services import media_service, google_sheets_service
@@ -52,6 +54,20 @@ def _is_expired(dt: datetime | None) -> bool:
     return now > dt
 
 
+def _alert_type_from_reason(reason: str | None) -> AlertTypeEnum:
+    """Classifica o tipo de alerta administrativo a partir do motivo."""
+    reason_lower = (reason or "").lower()
+    if any(kw in reason_lower for kw in ["adicional", "finaliza", "aprova", "personalizado"]):
+        return AlertTypeEnum.CUSTOM_FILLING
+    if any(kw in reason_lower for kw in ["humano", "atendente", "falar com a dani"]):
+        return AlertTypeEnum.HUMAN_REQUESTED
+    if any(kw in reason_lower for kw in ["max", "fallback", "travado", "tentativas"]):
+        return AlertTypeEnum.MAX_FALLBACK
+    if any(kw in reason_lower for kw in ["erro", "dados incompletos", "falha"]):
+        return AlertTypeEnum.FLOW_ERROR
+    return AlertTypeEnum.FLOW_ERROR
+
+
 async def process_message(db: AsyncSession, raw_payload: dict | list) -> WebhookResponse:
     """
     Pipeline principal de processamento de mensagem.
@@ -76,7 +92,7 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
             status="ignored",
             message=msg.ignore_reason or "ignored",
         )
-        
+
     if (msg.text or "").strip() == DEV_RESET_COMMAND:
         deleted = await _reset_client_test_data(db, msg.phone)
         await db.commit()
@@ -136,6 +152,28 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
                 status="human_lock",
                 message="Bot pausado — atendimento humano ativo",
             )
+
+    # 6.5 Verificar bot_active
+    bot_active = await settings_repo.get_setting(db, "bot_active")
+    if bot_active is False and not conversation.human_lock:
+        logger.info("bot_is_paused_globally", phone=msg.phone[:6] + "***")
+        await event_repo.log_event(
+            db, EventTypeEnum.MESSAGE_RECEIVED,
+            conversation_id=conversation.id,
+            payload={"text": msg.text, "phone": msg.phone[:6] + "***", "message_id": msg.message_id, "note": "bot_paused"}
+        )
+        await db.commit()
+
+        await evo_client.send_text(
+            msg.phone,
+            "Oi! No momento o atendimento automático está pausado. A Dani vai te responder assim que possível. 💕"
+        )
+
+        return WebhookResponse(
+            status="bot_paused",
+            message="Bot inativo globalmente",
+            processed=True,
+        )
 
     # 7. Log MESSAGE_RECEIVED
     await event_repo.log_event(
@@ -269,6 +307,16 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
             processed=True,
         )
 
+    if transition and transition.action_code == SmActionEnum.CREATE_ORDER_AND_ASK_SIZE:
+        orders_paused = await settings_repo.get_setting(db, "orders_paused")
+        if orders_paused is True:
+            await evo_client.send_text(
+                msg.phone,
+                "No momento nossa agenda está lotada/pausada devido à alta demanda! 🛑\n"
+                "Você ainda pode consultar nosso cardápio e valores pelo menu."
+            )
+            return WebhookResponse(status="orders_paused", message="Orders paused", processed=True)
+
     # 16. Executar ação
     order_id = active_order.id if active_order else None
     ctx = await execute_action(
@@ -339,11 +387,27 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
             await db.commit()
 
     if ctx.message_data.get("create_alert"):
+        reason = ctx.message_data.get("alert_reason", "")
+        alert_type = _alert_type_from_reason(reason)
+
+        await alerts_repo.create_alert(
+            db,
+            alert_type=alert_type,
+            title=f"🚨 Bot pausado — {msg.phone[:6]}***",
+            description=reason,
+            client_id=client.id,
+            conversation_id=conversation.id,
+            order_id=active_order.id if active_order else None,
+            client_phone=msg.phone,
+            client_name=client.name,
+            last_message=msg.text,
+        )
+
         await google_sheets_service.create_alert(
             db,
             title=f"🚨 Bot pausado — {msg.phone[:6]}***",
             phone=msg.phone,
-            reason=ctx.message_data.get("alert_reason", ""),
+            reason=reason,
             conversation_id=conversation.id,
             order_id=str(active_order.id) if active_order else None,
             order_number=active_order.order_number if active_order else None,

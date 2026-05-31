@@ -122,6 +122,7 @@ class TestNeedsApprovalFix:
         from app.core.classifier import ClassificationResult
         
         db = AsyncMock()
+        db.add = MagicMock()
         msg = ParsedMessage(
             phone="551999999999",
             text="Sim",
@@ -172,7 +173,9 @@ class TestNeedsApprovalFix:
             # Build response não deve ser chamado no fluxo especial, mas vamos ver
             mock_build.return_value = [ResponseItem(type="text", text="Resposta Normal")]
             
-            result = await process_message(db, {"foo": "bar"})
+            with patch("app.services.message_service.settings_repo.get_setting", new_callable=AsyncMock) as mock_get_setting:
+                mock_get_setting.return_value = True
+                result = await process_message(db, {"foo": "bar"})
             
             assert result.status == "ok"
             

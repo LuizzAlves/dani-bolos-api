@@ -3,11 +3,14 @@ Dani Bolos — FastAPI Motor de Atendimento
 Entry point da aplicação.
 """
 
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db, close_db
 from app.logging_config import setup_logging, get_logger
@@ -15,6 +18,9 @@ from app.integrations.evolution import close_client as close_evo_client
 from app.api import health, webhooks, admin
 
 logger = get_logger(__name__)
+
+# Diretório do dashboard
+DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
 
 
 @asynccontextmanager
@@ -49,12 +55,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — restrito por padrão
+# CORS — configuração por variável de ambiente para produção
+cors_origins_env = os.getenv("ADMIN_CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+allow_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[],  # Vazio = desativado
-    allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -85,6 +94,24 @@ app.include_router(webhooks.router)
 app.include_router(admin.router)
 
 
+# Servir dashboard — arquivos estáticos (CSS, JS)
+if DASHBOARD_DIR.exists():
+    app.mount("/painel/static", StaticFiles(directory=str(DASHBOARD_DIR)), name="dashboard")
+
+
+# Rota principal do painel
+@app.get("/painel")
+async def painel():
+    """Serve o painel administrativo."""
+    index_path = DASHBOARD_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(str(index_path), media_type="text/html")
+    return JSONResponse(
+        status_code=404,
+        content={"message": "Dashboard não encontrado. Verifique a pasta dashboard/."},
+    )
+
+
 # Root redirect
 @app.get("/")
 async def root():
@@ -94,4 +121,5 @@ async def root():
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs",
+        "painel": "/painel",
     }
