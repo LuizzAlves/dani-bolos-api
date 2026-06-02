@@ -589,8 +589,11 @@ async def _handle_save_date(db, ctx, conversation_id, client_id, classification,
         payload={"date": str(classification.parsed_date)},
     )
 
+    from app.core.service_hours import filter_time_slots
+
     time_slots = await catalog_repo.get_active_time_slots(db)
-    ctx.catalog_items = time_slots
+    filtered_slots = await filter_time_slots(db, classification.parsed_date, time_slots)
+    ctx.catalog_items = filtered_slots
 
 
 async def _handle_reject_date(db, ctx, conversation_id, client_id, classification, order_id):
@@ -749,10 +752,14 @@ async def _handle_ask_order_id(db, ctx, conversation_id, client_id, classificati
 
 async def _handle_check_order(db, ctx, conversation_id, client_id, classification, order_id):
     """Consulta status do pedido."""
+    if classification.matched_value == "RETURN_MENU":
+        ctx.message_data["return_to_menu"] = True
+        return
+
     if classification.matched_value:
         try:
             num = int(classification.matched_value)
-            order = await order_repo.get_order_by_number(db, num)
+            order = await order_repo.get_order_by_number_with_details(db, num, client_id=client_id)
             if order:
                 ctx.order_data["order"] = order
                 ctx.order_data["found"] = True

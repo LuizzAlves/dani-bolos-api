@@ -113,6 +113,32 @@ async def test_create_order_rejects_unavailable_time_slot():
     assert "indispon" in exc.value.detail
 
 
+async def test_create_order_rejects_time_outside_service_hours():
+    body = ManualOrderCreate(
+        client_name="Test Client",
+        client_phone="551199999999",
+        pickup_date="2025-12-25",
+        pickup_time="23:00",
+    )
+
+    with patch("app.repositories.availability.check_date_available", new_callable=AsyncMock) as mock_check_date:
+        mock_check_date.return_value = {"available": True}
+        with patch("app.repositories.catalog.get_all_time_slots", new_callable=AsyncMock) as mock_get_slots:
+            mock_slot = MagicMock()
+            mock_slot.slot_time = time(23, 0)
+            mock_slot.available = True
+            mock_get_slots.return_value = [mock_slot]
+
+            with patch("app.core.service_hours.settings_repo.get_setting", new_callable=AsyncMock) as mock_get_setting:
+                mock_get_setting.return_value = None
+
+                with pytest.raises(HTTPException) as exc:
+                    await create_order(body, db=AsyncMock(), _auth=True)
+
+    assert exc.value.status_code == 400
+    assert "funcionamento" in exc.value.detail
+
+
 async def test_alert_mapping_returns_custom_filling():
     assert _alert_type_from_reason("aprovacao manual solicitada") == AlertTypeEnum.CUSTOM_FILLING
     assert _alert_type_from_reason("adicional precisa de aprovacao") == AlertTypeEnum.CUSTOM_FILLING

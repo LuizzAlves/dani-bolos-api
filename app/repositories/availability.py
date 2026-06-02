@@ -8,7 +8,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Availability
-
+from app.core.service_hours import is_date_open
 
 async def check_date_available(db: AsyncSession, target_date: date) -> dict:
     """
@@ -19,6 +19,16 @@ async def check_date_available(db: AsyncSession, target_date: date) -> dict:
         select(Availability).where(Availability.date == target_date)
     )
     avail = result.scalar_one_or_none()
+
+    # Check if the shop is open on this weekday
+    is_open, reason = await is_date_open(db, target_date)
+    if not is_open:
+        return {
+            "available": False,
+            "blocked": True,
+            "block_reason": reason,
+            "remaining_slots": 0,
+        }
 
     if avail is None:
         # Data não cadastrada — considerar indisponível (fora da agenda)
@@ -41,7 +51,7 @@ async def check_date_available(db: AsyncSession, target_date: date) -> dict:
     return {
         "available": remaining > 0,
         "blocked": False,
-        "block_reason": None,
+        "block_reason": None if remaining > 0 else "LIMITE_ATINGIDO",
         "remaining_slots": max(0, remaining),
     }
 

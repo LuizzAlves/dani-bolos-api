@@ -162,20 +162,59 @@
             <section class="tab-panel" id="tab-pedidos">
                 <div class="page-title">
                     <h1>📋 Gestão de Pedidos</h1>
-                    <p class="page-subtitle">Clique em um card para ver detalhes</p>
+                    <p class="page-subtitle">Arraste os cards para alterar o status</p>
                 </div>
+
+                <!-- Resumo Operacional Kanban -->
+                <div class="kanban-summary">
+                    <div class="ks-card ks-card--blue">
+                        <span class="ks-label">Total Hoje</span>
+                        <span class="ks-value" id="ks-total-hoje">0</span>
+                    </div>
+                    <div class="ks-card ks-card--violet">
+                        <span class="ks-label">Em Produção (R$)</span>
+                        <span class="ks-value" id="ks-valor-producao">R$ 0,00</span>
+                    </div>
+                    <div class="ks-card ks-card--green">
+                        <span class="ks-label">Entregues Hoje</span>
+                        <span class="ks-value" id="ks-entregues">0</span>
+                    </div>
+                    <div class="ks-card ks-card--red">
+                        <span class="ks-label">Atrasados</span>
+                        <span class="ks-value" id="ks-atrasados">0</span>
+                    </div>
+                </div>
+
+                <div class="kanban-controls">
+                    <div class="kanban-search">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        <input type="text" id="kanban-search-input" placeholder="Buscar por cliente, telefone ou pedido...">
+                    </div>
+                    <div class="kanban-filters" id="kanban-filters">
+                        <button class="k-filter active" data-filter="all">Todos</button>
+                        <button class="k-filter" data-filter="today">Hoje</button>
+                        <button class="k-filter" data-filter="tomorrow">Amanhã</button>
+                        <button class="k-filter" data-filter="week">Esta semana</button>
+                        <button class="k-filter k-filter--red" data-filter="late">Atrasados</button>
+                    </div>
+                </div>
+
                 <div class="kanban-board" id="kanban-board">
-                    <div class="kanban-column" data-status="AGUARDANDO_CONFIRMACAO">
+                    <div class="kanban-column" data-status="AGUARDANDO_CONFIRMACAO" data-droppable="true">
                         <div class="kanban-column-header kh--amber"><span class="kanban-dot"></span><h3>Aguardando Confirmação</h3><span class="kanban-count" id="kc-aguardando">0</span></div>
                         <div class="kanban-cards" id="kanban-aguardando"></div>
                     </div>
-                    <div class="kanban-column" data-status="CONFIRMADOS_PRODUCAO">
-                        <div class="kanban-column-header kh--blue"><span class="kanban-dot"></span><h3>Em Produção / Confirmados</h3><span class="kanban-count" id="kc-producao">0</span></div>
+                    <div class="kanban-column" data-status="EM_PRODUCAO" data-droppable="true">
+                        <div class="kanban-column-header kh--blue"><span class="kanban-dot"></span><h3>Em Produção</h3><span class="kanban-count" id="kc-producao">0</span></div>
                         <div class="kanban-cards" id="kanban-producao"></div>
                     </div>
-                    <div class="kanban-column" data-status="FINALIZADOS">
-                        <div class="kanban-column-header kh--green"><span class="kanban-dot"></span><h3>Finalizados</h3><span class="kanban-count" id="kc-finalizados">0</span></div>
-                        <div class="kanban-cards" id="kanban-finalizados"></div>
+                    <div class="kanban-column" data-status="PRONTO" data-droppable="true">
+                        <div class="kanban-column-header kh--violet"><span class="kanban-dot"></span><h3>Pronto</h3><span class="kanban-count" id="kc-pronto">0</span></div>
+                        <div class="kanban-cards" id="kanban-pronto"></div>
+                    </div>
+                    <div class="kanban-column" data-status="ENTREGUE" data-droppable="true">
+                        <div class="kanban-column-header kh--green"><span class="kanban-dot"></span><h3>Entregue</h3><span class="kanban-count" id="kc-entregue">0</span></div>
+                        <div class="kanban-cards" id="kanban-entregue"></div>
                     </div>
                 </div>
             </section>
@@ -277,6 +316,7 @@
                     <button class="catalog-tab" data-catalog="adicionais" id="ct-adicionais">Adicionais</button>
                     <button class="catalog-tab" data-catalog="finalizacoes" id="ct-finalizacoes">Finalizações</button>
                     <button class="catalog-tab" data-catalog="docinhos" id="ct-docinhos">Docinhos</button>
+                    <button class="catalog-tab" data-catalog="horarios" id="ct-horarios">Horários</button>
                     <button class="catalog-tab" data-catalog="geral" id="ct-geral">Geral</button>
                 </div>
                 <div class="catalog-content" id="catalog-content"></div>
@@ -284,15 +324,15 @@
         </div>
     </main>
 
-    <!-- MODAL -->
-    <div class="modal-overlay" id="modal-overlay">
-        <div class="modal" id="order-modal">
-            <div class="modal-header">
-                <h2 id="modal-title">Pedido</h2>
-                <button class="modal-close" id="modal-close">&times;</button>
+    <!-- DRAWER LATERAL (Substitui Modal Antigo) -->
+    <div class="drawer-overlay" id="drawer-overlay">
+        <div class="drawer" id="order-drawer">
+            <div class="drawer-header">
+                <h2 id="drawer-title">Pedido</h2>
+                <button class="drawer-close" id="drawer-close">&times;</button>
             </div>
-            <div class="modal-body" id="modal-body"></div>
-            <div class="modal-footer" id="modal-footer"></div>
+            <div class="drawer-body" id="drawer-body"></div>
+            <div class="drawer-footer" id="drawer-footer"></div>
         </div>
     </div>
 

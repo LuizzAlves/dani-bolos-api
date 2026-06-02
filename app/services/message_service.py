@@ -219,7 +219,7 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
         return navigation_result
 
     # 11. Carregar catálogo apenas quando necessário
-    catalog_items = await _load_catalog_for_state(db, conversation.state)
+    catalog_items = await _load_catalog_for_state(db, conversation.state, active_order)
 
     # 12. Classificar input
     if lock_expired_trigger:
@@ -275,9 +275,11 @@ async def process_message(db: AsyncSession, raw_payload: dict | list) -> Webhook
         avail = await avail_repo.check_date_available(db, classification.parsed_date)
         if not avail["available"]:
             trigger = SmTriggerEnum.DATE_UNAVAILABLE
-            classification.extra_data["reason"] = avail.get(
-                "block_reason", "Data lotada ou bloqueada"
-            )
+            reason = avail.get("block_reason", "Data lotada ou bloqueada")
+            if reason == "LIMITE_ATINGIDO":
+                custom_msg = await settings_repo.get_setting(db, "limit_reached_message")
+                reason = custom_msg or "Infelizmente já atingimos o limite de encomendas para esta data. Por favor, escolha outro dia."
+            classification.extra_data["reason"] = reason
         else:
             trigger = SmTriggerEnum.DATE_AVAILABLE
 
@@ -788,12 +790,17 @@ async def _prepare_back_context(
     elif previous_state == ConversationState.ESCOLHENDO_FINALIZACAO:
         ctx.catalog_items = await catalog_repo.get_active_finishes(db)
     elif previous_state == ConversationState.DEFININDO_HORARIO:
-        ctx.catalog_items = await catalog_repo.get_active_time_slots(db)
+        slots = await catalog_repo.get_active_time_slots(db)
+        if active_order and active_order.pickup_date:
+            from app.core.service_hours import filter_time_slots
+            ctx.catalog_items = await filter_time_slots(db, active_order.pickup_date, slots)
+        else:
+            ctx.catalog_items = slots
 
     return ctx
 
 
-async def _load_catalog_for_state(db: AsyncSession, state: ConversationState) -> list:
+async def _load_catalog_for_state(db: AsyncSession, state: ConversationState, active_order=None) -> list:
     """Carrega catálogo apenas para estados que precisam."""
     catalog_map = {
         ConversationState.ESCOLHENDO_TAMANHO: catalog_repo.get_active_sizes,
@@ -806,7 +813,11 @@ async def _load_catalog_for_state(db: AsyncSession, state: ConversationState) ->
 
     loader = catalog_map.get(state)
     if loader:
-        return await loader(db)
+        items = await loader(db)
+        if state == ConversationState.DEFININDO_HORARIO and active_order and active_order.pickup_date:
+            from app.core.service_hours import filter_time_slots
+            items = await filter_time_slots(db, active_order.pickup_date, items)
+        return items
     return []
 
 

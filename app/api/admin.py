@@ -24,6 +24,7 @@ from app.repositories import (
     alerts as alerts_repo,
     settings as settings_repo,
 )
+from app.core.service_hours import is_time_allowed_for_date
 from app.schemas.admin import (
     DashboardStats, OrderListItem, OrderDetail, OrderStatusUpdate,
     ManualOrderCreate, CalendarDay, CalendarResponse, AvailabilityUpdate,
@@ -282,6 +283,10 @@ async def create_order(
         raise HTTPException(400, f"Horário '{time_str}' não existe nas opções configuradas.")
     if not slot_match.available:
         raise HTTPException(400, f"Horário '{time_str}' está temporariamente indisponível.")
+
+    allowed_time, time_reason = await is_time_allowed_for_date(db, pickup_date, pickup_time)
+    if not allowed_time:
+        raise HTTPException(400, time_reason or "Horário fora do funcionamento para esta data.")
 
     # Calcular total se não enviado
     from decimal import Decimal

@@ -93,7 +93,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initSidebar();
     initDate();
-    initModal();
+    initDrawer();
+    initKanbanFilters();
 
     if (API.token) {
         tryAuth();
@@ -293,7 +294,7 @@ function renderCal() {
 
         let h = '<span>' + d + '</span>';
         if(av && !av.blocked) {
-            const cnt = av.order_count || av.confirmed_orders || 0;
+            const cnt = av.order_count ?? 0;
             const max = av.max_orders || 5;
             const p = cnt / max;
             const c = p >= 1 ? 'full' : p >= 0.6 ? 'warning' : cnt > 0 ? 'available' : '';
@@ -313,7 +314,7 @@ async function loadDayDetail(ds, dn) {
     document.getElementById('day-detail-title').textContent = dn + ' de ' + MN[calM];
 
     const max = dayInfo.max_orders || 5;
-    const cnt = dayInfo.order_count || dayInfo.confirmed_orders || 0;
+    const cnt = dayInfo.order_count ?? 0;
     document.getElementById('cap-value').textContent = max;
     const pct = max > 0 ? (cnt / max) * 100 : 0;
     const bar = document.getElementById('capacity-bar');
@@ -343,7 +344,7 @@ async function loadDayDetail(ds, dn) {
             </div>`).join('');
 
         list.querySelectorAll('.day-order-item').forEach(el => {
-            el.addEventListener('click', () => openOrderModal(el.dataset.id));
+            el.addEventListener('click', () => openOrderDrawer(el.dataset.id));
         });
     } catch (e) {
         document.getElementById('day-orders-list').innerHTML = '<p class="empty-state">Erro ao carregar pedidos</p>';
@@ -367,8 +368,15 @@ async function toggleBlockDay() {
     if (!selDay) return;
     const dayInfo = calendarData?.days?.find(d => d.date === selDay);
     const isBlocked = dayInfo?.blocked || false;
+
+    let reason = null;
+    if (!isBlocked) {
+        reason = prompt('Opcional: Motivo do bloqueio ou mensagem para o cliente (ex: Feriado, Férias, Fechado):');
+        if (reason === null) return; // User cancelled
+    }
+
     try {
-        await API.updateDay(selDay, { blocked: !isBlocked, block_reason: isBlocked ? null : 'Bloqueado pelo painel' });
+        await API.updateDay(selDay, { blocked: !isBlocked, block_reason: reason || (isBlocked ? null : 'Bloqueado pelo painel') });
         await loadCalendar();
         const dn = parseInt(selDay.split('-')[2]);
         loadDayDetail(selDay, dn);
@@ -379,45 +387,192 @@ async function toggleBlockDay() {
 // ============================================================
 // KANBAN
 // ============================================================
+let allOrdersCache = [];
+
+function initKanbanFilters() {
+    const sInp = document.getElementById('kanban-search-input');
+    if (sInp) {
+        sInp.addEventListener('input', () => filterKanban());
+    }
+
+    document.querySelectorAll('.k-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.k-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filterKanban();
+        });
+    });
+}
+
+function filterKanban() {
+    const term = (document.getElementById('kanban-search-input')?.value || '').toLowerCase();
+    const activeFilter = document.querySelector('.k-filter.active')?.dataset.filter || 'all';
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    now.setDate(now.getDate() + 1);
+    const tomorrowStr = now.toISOString().split('T')[0];
+
+    // Reset now for week start
+    const wNow = new Date();
+    const wDay = wNow.getDay();
+    const wStart = new Date(wNow); wStart.setDate(wNow.getDate() - wDay);
+    const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
+    const wStartStr = wStart.toISOString().split('T')[0];
+    const wEndStr = wEnd.toISOString().split('T')[0];
+
+    document.querySelectorAll('.kanban-card').forEach(card => {
+        const txt = card.textContent.toLowerCase();
+        const isLate = card.classList.contains('is-late');
+        const d = card.dataset.date; // we'll add this in card creation
+
+        let matchTerm = !term || txt.includes(term);
+        let matchF = true;
+
+        if (activeFilter === 'today') matchF = d === todayStr;
+        else if (activeFilter === 'tomorrow') matchF = d === tomorrowStr;
+        else if (activeFilter === 'week') matchF = d >= wStartStr && d <= wEndStr;
+        else if (activeFilter === 'late') matchF = isLate;
+
+        card.style.display = (matchTerm && matchF) ? 'block' : 'none';
+    });
+}
+
+function updateKanbanSummary(orders) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let tHoje = 0, vProd = 0, entHoje = 0, atrasos = 0;
+
+    orders.forEach(o => {
+        const pd = o.pickup_date;
+        if (pd === todayStr && !['CANCELADO', 'RASCUNHO'].includes(o.status)) tHoje++;
+        if (['CONFIRMADO', 'EM_PRODUCAO'].includes(o.status)) vProd += parseFloat(o.total_value || 0);
+        if (pd === todayStr && ['ENTREGUE', 'FINALIZADO'].includes(o.status)) entHoje++;
+        if (pd && pd < todayStr && !['ENTREGUE', 'FINALIZADO', 'CANCELADO', 'RASCUNHO'].includes(o.status)) atrasos++;
+    });
+
+    const fHoje = document.getElementById('ks-total-hoje');
+    if(fHoje) fHoje.textContent = tHoje;
+    const fVProd = document.getElementById('ks-valor-producao');
+    if(fVProd) fVProd.textContent = 'R$ ' + vProd.toFixed(2).replace('.', ',');
+    const fEnt = document.getElementById('ks-entregues');
+    if(fEnt) fEnt.textContent = entHoje;
+    const fAtr = document.getElementById('ks-atrasados');
+    if(fAtr) fAtr.textContent = atrasos;
+}
+
 async function loadKanban() {
     const map = {
         AGUARDANDO_CONFIRMACAO: 'kanban-aguardando',
         CONFIRMADO: 'kanban-producao',
         EM_PRODUCAO: 'kanban-producao',
-        PRONTO: 'kanban-finalizados',
-        ENTREGUE: 'kanban-finalizados',
-        FINALIZADO: 'kanban-finalizados',
+        PRONTO: 'kanban-pronto',
+        ENTREGUE: 'kanban-entregue',
+        FINALIZADO: 'kanban-entregue',
     };
-    // Initialize columns
-    const columns = ['kanban-aguardando', 'kanban-producao', 'kanban-finalizados'];
-    columns.forEach(id => { document.getElementById(id).innerHTML = '<div class="kanban-loading">Carregando...</div>'; });
+    const columns = ['kanban-aguardando', 'kanban-producao', 'kanban-pronto', 'kanban-entregue'];
+    columns.forEach(id => { const c=document.getElementById(id); if(c) c.innerHTML = '<div class="kanban-loading">Carregando...</div>'; });
 
     try {
         const orders = await API.getOrders();
-        columns.forEach(id => { document.getElementById(id).innerHTML = ''; });
+        allOrdersCache = orders;
+        updateKanbanSummary(orders);
+
+        columns.forEach(id => { const c=document.getElementById(id); if(c) c.innerHTML = ''; });
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const now2 = new Date(); now2.setDate(now2.getDate() + 1);
+        const tomStr = now2.toISOString().split('T')[0];
 
         orders.forEach(o => {
             const cid = map[o.status]; if (!cid) return;
+            const container = document.getElementById(cid);
+            if(!container) return;
+
             const card = document.createElement('div');
             card.className = 'kanban-card';
+            card.draggable = true;
+            card.dataset.id = o.id;
+            card.dataset.date = o.pickup_date || '';
+
             const phoneClean = (o.client_phone || '').replace(/\D/g, '');
+            const isLate = o.pickup_date && o.pickup_date < todayStr && !['ENTREGUE', 'FINALIZADO'].includes(o.status);
+
+            if (isLate) card.classList.add('is-late');
+            else if (o.pickup_date === todayStr) card.classList.add('is-today');
+            else if (o.pickup_date === tomStr) card.classList.add('is-tomorrow');
+
+            // Action button
+            let actionBtn = '';
+            if (['AGUARDANDO_CONFIRMACAO', 'CONFIRMADO'].includes(o.status)) {
+                actionBtn = `<button class="btn-main-action" data-status="EM_PRODUCAO" data-id="${o.id}">Em Produção</button>`;
+            } else if (o.status === 'EM_PRODUCAO') {
+                actionBtn = `<button class="btn-main-action btn-main-action--pronto" data-status="PRONTO" data-id="${o.id}">Pronto</button>`;
+            } else if (o.status === 'PRONTO') {
+                actionBtn = `<button class="btn-main-action btn-main-action--entregue" data-status="ENTREGUE" data-id="${o.id}">Entregue</button>`;
+            }
 
             card.innerHTML = `
-                <div class="kcard-header"><span class="kcard-number">#${o.order_number || '—'}</span><span class="kcard-value">${o.total_value ? 'R$ ' + Number(o.total_value).toFixed(2).replace('.', ',') : '—'}</span></div>
+                <div class="kcard-header">
+                    <span class="kcard-number">#${o.order_number || '—'}</span>
+                    ${isLate ? '<span class="kcard-badge-late">Atrasado</span>' : ''}
+                </div>
                 <div class="kcard-client">${o.client_name || 'Sem nome'}</div>
                 <div class="kcard-details">
                     <span>${o.size_description || ''} · ${o.dough || ''}</span>
                     <span>${o.filling_1 || ''}${o.filling_2 ? ' + ' + o.filling_2 : ''}</span>
                 </div>
                 <div class="kcard-date">📅 ${fmtDate(o.pickup_date)} às ${o.pickup_time || '—'}</div>
+                <div class="kcard-header" style="margin-top: 6px; margin-bottom: 0;">
+                    <span class="kcard-value">${o.total_value ? 'R$ ' + Number(o.total_value).toFixed(2).replace('.', ',') : '—'}</span>
+                </div>
                 <div class="kcard-actions">
-                    ${phoneClean ? '<a href="https://wa.me/' + phoneClean + '" target="_blank" class="btn-whatsapp" title="Abrir WhatsApp"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.243-1.216l-.256-.16-2.867.852.852-2.867-.16-.256A8 8 0 1120 12a8 8 0 01-8 8z"/></svg></a>' : ''}
-                    <button class="btn-detail" title="Ver detalhes">•••</button>
+                    ${actionBtn}
+                    ${phoneClean && !actionBtn ? '<a href="https://wa.me/' + phoneClean + '" target="_blank" class="btn-whatsapp" title="Abrir WhatsApp"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.019-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.955 9.955 0 0012 22c5.523 0 10-4.477 10-10S17.523 2 12 2zm0 18a8 8 0 01-4.243-1.216l-.256-.16-2.867.852.852-2.867-.16-.256A8 8 0 1120 12a8 8 0 01-8 8z"/></svg></a>' : ''}
+                    <button class="btn-detail" title="Ver detalhes" data-id="${o.id}">•••</button>
                 </div>`;
 
-            card.querySelector('.btn-detail')?.addEventListener('click', (e) => { e.stopPropagation(); openOrderModal(o.id); });
-            card.addEventListener('click', () => openOrderModal(o.id));
-            document.getElementById(cid).appendChild(card);
+            // Setup events
+            card.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', o.id);
+                card.classList.add('dragging');
+            });
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                document.querySelectorAll('.kanban-column').forEach(col => col.classList.remove('drag-over'));
+            });
+
+            card.querySelector('.btn-main-action')?.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const ns = e.target.dataset.status;
+                try {
+                    await API.updateStatus(o.id, ns);
+                    showToast('Status atualizado para ' + STATUS_LABELS[ns], 'success');
+                    loadKanban(); loadDashboard();
+                } catch(err) { showToast('Erro: ' + err.message, 'error'); }
+            });
+
+            card.querySelector('.btn-detail')?.addEventListener('click', (e) => { e.stopPropagation(); openOrderDrawer(o.id); });
+            card.addEventListener('click', () => openOrderDrawer(o.id));
+            container.appendChild(card);
+        });
+
+        // Setup drop zones
+        document.querySelectorAll('.kanban-column').forEach(col => {
+            col.addEventListener('dragover', e => { e.preventDefault(); col.querySelector('.kanban-cards').classList.add('drag-over'); });
+            col.addEventListener('dragleave', e => { col.querySelector('.kanban-cards').classList.remove('drag-over'); });
+            col.addEventListener('drop', async e => {
+                e.preventDefault();
+                col.querySelector('.kanban-cards').classList.remove('drag-over');
+                const id = e.dataTransfer.getData('text/plain');
+                const targetStatus = col.dataset.status;
+                if(id && targetStatus) {
+                    try {
+                        await API.updateStatus(id, targetStatus);
+                        showToast('Movido para ' + STATUS_LABELS[targetStatus], 'success');
+                        loadKanban(); loadDashboard();
+                    } catch(err) { showToast('Erro: ' + err.message, 'error'); }
+                }
+            });
         });
 
         // Update counts
@@ -429,8 +584,10 @@ async function loadKanban() {
             if (countEl) countEl.textContent = n;
         });
 
+        filterKanban();
+
     } catch (e) {
-        columns.forEach(id => { document.getElementById(id).innerHTML = '<div class="kanban-empty">Erro ao carregar</div>'; });
+        columns.forEach(id => { const c=document.getElementById(id); if(c) c.innerHTML = '<div class="kanban-empty">Erro ao carregar</div>'; });
         console.error('loadKanban:', e);
     }
 }
@@ -442,22 +599,22 @@ function fmtDate(s) {
 }
 
 // ============================================================
-// ORDER MODAL
+// DRAWER
 // ============================================================
-function initModal() {
-    document.getElementById('modal-close').addEventListener('click', closeModal);
-    document.getElementById('modal-overlay').addEventListener('click', e => { if(e.target === e.currentTarget) closeModal(); });
+function initDrawer() {
+    document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+    document.getElementById('drawer-overlay').addEventListener('click', e => { if(e.target === e.currentTarget) closeDrawer(); });
 }
 
-async function openOrderModal(orderId) {
+async function openOrderDrawer(orderId) {
     try {
         const o = await API.getOrder(orderId);
-        document.getElementById('modal-title').textContent = 'Pedido #' + (o.order_number || '—');
+        document.getElementById('drawer-title').textContent = 'Pedido #' + (o.order_number || '—');
 
         const phoneClean = (o.client_phone || '').replace(/\D/g, '');
         const waLink = phoneClean ? `<a href="https://wa.me/${phoneClean}" target="_blank" class="btn btn--whatsapp btn--sm">📱 WhatsApp</a>` : '';
 
-        document.getElementById('modal-body').innerHTML = [
+        document.getElementById('drawer-body').innerHTML = [
             ['👤 Cliente', o.client_name || '—'],
             ['📱 Telefone', (o.client_phone || '—') + ' ' + waLink],
             ['🎂 Tamanho', o.size_description || '—'],
@@ -473,7 +630,7 @@ async function openOrderModal(orderId) {
         + `<div class="modal-detail-row" style="margin-top:10px;padding-top:12px;border-top:1px solid var(--border)"><span class="modal-detail-label" style="font-size:1rem;font-weight:700">💰 Total</span><span class="modal-detail-value" style="font-size:1.1rem;font-weight:700;color:var(--green)">${o.total_value ? 'R$ ' + Number(o.total_value).toFixed(2).replace('.', ',') : '—'}</span></div>`;
 
         // Footer buttons based on status
-        const footer = document.getElementById('modal-footer');
+        const footer = document.getElementById('drawer-footer');
         const nextStatuses = STATUS_FLOW[o.status] || [];
         footer.innerHTML = nextStatuses.map(ns => {
             const cls = ns === 'CANCELADO' ? 'btn--danger' : 'btn--primary';
@@ -487,20 +644,20 @@ async function openOrderModal(orderId) {
                 try {
                     await API.updateStatus(o.id, ns);
                     showToast('Status atualizado: ' + (STATUS_LABELS[ns] || ns), 'success');
-                    closeModal();
+                    closeDrawer();
                     loadKanban();
                     loadDashboard();
                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
             });
         });
 
-        document.getElementById('modal-overlay').classList.add('visible');
+        document.getElementById('drawer-overlay').classList.add('visible');
     } catch (e) {
         showToast('Erro ao abrir pedido: ' + e.message, 'error');
     }
 }
 
-function closeModal() { document.getElementById('modal-overlay').classList.remove('visible'); }
+function closeDrawer() { document.getElementById('drawer-overlay').classList.remove('visible'); }
 
 // ============================================================
 // NEW ORDER FORM
@@ -695,6 +852,7 @@ function initCatalogTabs() {
 
 async function loadCatalogTab(type) {
     if (type === 'geral') { renderGeneralSettings(); return; }
+    if (type === 'horarios') { renderServiceHours(); return; }
 
     const c = document.getElementById('catalog-content');
     if (!catalogCache) {
@@ -800,6 +958,83 @@ function bindCatalogToggles(type) {
 }
 
 // ============================================================
+// SERVICE HOURS SETTINGS
+// ============================================================
+async function renderServiceHours() {
+    const c = document.getElementById('catalog-content');
+    let settings = {};
+    try { settings = (await API.getSettings()).settings; } catch { /* use defaults */ }
+
+    const defaultHours = {
+        "0": {isOpen: true, openTime: "06:00", closeTime: "20:00"},
+        "1": {isOpen: true, openTime: "06:00", closeTime: "20:00"},
+        "2": {isOpen: true, openTime: "06:00", closeTime: "20:00"},
+        "3": {isOpen: true, openTime: "06:00", closeTime: "20:00"},
+        "4": {isOpen: true, openTime: "06:00", closeTime: "20:00"},
+        "5": {isOpen: true, openTime: "07:00", closeTime: "18:00"},
+        "6": {isOpen: true, openTime: "09:00", closeTime: "12:00"}
+    };
+
+    const hours = settings.service_hours || defaultHours;
+    const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+
+    let html = `
+    <div class="config-grid" style="padding: 22px;">
+        <div class="card card--full">
+            <h2>📅 Horários de Serviço (por dia da semana)</h2>
+            <table class="catalog-table">
+                <thead>
+                    <tr>
+                        <th>Dia</th>
+                        <th>Aberto?</th>
+                        <th>Abertura</th>
+                        <th>Fechamento</th>
+                    </tr>
+                </thead>
+                <tbody id="service-hours-body">
+    `;
+
+    for (let i = 0; i < 7; i++) {
+        const daySet = hours[i] || {isOpen: false, openTime: "00:00", closeTime: "00:00"};
+        html += `
+            <tr data-day="${i}">
+                <td>${days[i]}</td>
+                <td>${tog(daySet.isOpen)}</td>
+                <td><input type="time" class="inline-edit sh-open" value="${daySet.openTime}"></td>
+                <td><input type="time" class="inline-edit sh-close" value="${daySet.closeTime}"></td>
+            </tr>
+        `;
+    }
+
+    html += `
+                </tbody>
+            </table>
+            <div style="margin-top: 20px;">
+                <button class="btn btn--primary" id="btn-save-service-hours">Salvar Horários</button>
+            </div>
+        </div>
+    </div>`;
+
+    c.innerHTML = html;
+
+    document.getElementById('btn-save-service-hours').addEventListener('click', async () => {
+        const trs = document.querySelectorAll('#service-hours-body tr');
+        const newHours = {};
+        trs.forEach(tr => {
+            const day = tr.dataset.day;
+            const isOpen = tr.querySelector('.toggle input').checked;
+            const openTime = tr.querySelector('.sh-open').value;
+            const closeTime = tr.querySelector('.sh-close').value;
+            newHours[day] = {isOpen, openTime, closeTime};
+        });
+        try {
+            await API.saveSettings({ service_hours: newHours });
+            showToast('Horários salvos! ✅', 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    });
+}
+
+// ============================================================
 // GENERAL SETTINGS (sub-tab "Geral" within Config)
 // ============================================================
 async function renderGeneralSettings() {
@@ -825,8 +1060,9 @@ async function renderGeneralSettings() {
             <div class="cfg-field"><label>Máx. fallbacks antes de pausar</label><input type="number" id="cfg-fallback" value="${settings.max_fallback_count || 3}" min="1"></div>
         </div>
         <div class="card card--full">
-            <h2>📢 Aviso Sazonal</h2>
-            <div class="cfg-field"><label>Mensagem exibida no início da conversa</label><textarea rows="3" id="cfg-seasonal" placeholder="Ex: 🎄 Agenda de Natal aberta!">${settings.seasonal_message || ''}</textarea></div>
+            <h2>📢 Mensagens e Avisos</h2>
+            <div class="cfg-field"><label>Aviso Sazonal (início da conversa)</label><textarea rows="2" id="cfg-seasonal" placeholder="Ex: 🎄 Agenda de Natal aberta!">${settings.seasonal_message || ''}</textarea></div>
+            <div class="cfg-field"><label>Mensagem de Limite Atingido (quando um dia lota)</label><textarea rows="2" id="cfg-limit-message" placeholder="Ex: Infelizmente já atingimos o limite de encomendas para esta data. Por favor, escolha outro dia.">${settings.limit_reached_message || ''}</textarea></div>
             <button class="btn btn--primary" id="btn-save-general">Salvar Configurações</button>
         </div>
     </div>`;
@@ -844,6 +1080,7 @@ async function saveGeneralSettings() {
         timeout_minutes: parseInt(document.getElementById('cfg-timeout').value) || 120,
         max_fallback_count: parseInt(document.getElementById('cfg-fallback').value) || 3,
         seasonal_message: document.getElementById('cfg-seasonal').value,
+        limit_reached_message: document.getElementById('cfg-limit-message').value,
     };
     try {
         await API.saveSettings(data);

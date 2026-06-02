@@ -56,7 +56,9 @@ INSERT INTO admin_settings (key, value) VALUES
     ('shop_name', '"Dani Bolos"'::jsonb),
     ('shop_phone', '""'::jsonb),
     ('timeout_minutes', '120'::jsonb),
-    ('max_fallback_count', '3'::jsonb)
+    ('max_fallback_count', '3'::jsonb),
+    ('limit_reached_message', '""'::jsonb),
+    ('service_hours', '{"0": {"isOpen": true, "openTime": "06:00", "closeTime": "20:00"}, "1": {"isOpen": true, "openTime": "06:00", "closeTime": "20:00"}, "2": {"isOpen": true, "openTime": "06:00", "closeTime": "20:00"}, "3": {"isOpen": true, "openTime": "06:00", "closeTime": "20:00"}, "4": {"isOpen": true, "openTime": "06:00", "closeTime": "20:00"}, "5": {"isOpen": true, "openTime": "07:00", "closeTime": "18:00"}, "6": {"isOpen": true, "openTime": "09:00", "closeTime": "12:00"}}'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- 5. Tornar conversation_id nullable em orders (para pedidos manuais)

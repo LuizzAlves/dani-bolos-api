@@ -276,6 +276,50 @@ input, textarea, select { font-family: inherit; }
 /* ============================================================
    KANBAN
    ============================================================ */
+.kanban-summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px; margin-bottom: 20px;
+}
+.ks-card {
+    background: var(--bg-white); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 14px 18px; display: flex; flex-direction: column; gap: 4px; box-shadow: var(--shadow-sm);
+    border-left-width: 4px;
+}
+.ks-card--blue { border-left-color: var(--blue); }
+.ks-card--violet { border-left-color: var(--violet); }
+.ks-card--green { border-left-color: var(--green); }
+.ks-card--red { border-left-color: var(--red); }
+.ks-label { font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; }
+.ks-value { font-size: 1.3rem; font-weight: 700; color: var(--text); }
+
+.kanban-controls {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 16px; gap: 14px; flex-wrap: wrap;
+}
+.kanban-search {
+    position: relative; flex: 1; max-width: 400px;
+}
+.kanban-search .search-icon {
+    position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); width: 16px; height: 16px;
+}
+.kanban-search input {
+    width: 100%; padding: 10px 14px 10px 38px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-white);
+    color: var(--text); font-size: 0.86rem; transition: border-color var(--tr);
+}
+.kanban-search input:focus { border-color: var(--blue); outline: none; }
+
+.kanban-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.k-filter {
+    padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border);
+    background: var(--bg-white); color: var(--text-secondary);
+    font-size: 0.8rem; font-weight: 500; transition: all var(--tr);
+}
+.k-filter:hover { background: var(--bg-hover); color: var(--text); border-color: var(--text-muted); }
+.k-filter.active { background: var(--blue-light); border-color: var(--blue); color: var(--blue); }
+.k-filter.k-filter--red.active { background: var(--red-light); border-color: var(--red); color: var(--red); }
+
 .kanban-board { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; }
 .kanban-column { min-width: 260px; flex: 1; display: flex; flex-direction: column; }
 
@@ -302,6 +346,7 @@ input, textarea, select { font-family: inherit; }
     border: 1px solid var(--border); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 180px;
 }
+.kanban-cards.drag-over { background: var(--blue-light); border-style: dashed; border-color: var(--blue); }
 
 .kanban-card {
     background: var(--bg-white); border: 1px solid var(--border);
@@ -332,12 +377,32 @@ input, textarea, select { font-family: inherit; }
     border: none; transition: all var(--tr); text-decoration: none;
 }
 .btn-whatsapp:hover { background: var(--whatsapp-dark); transform: scale(1.08); }
+
+.btn-main-action {
+    flex: 1; padding: 6px 10px; border-radius: var(--radius-xs);
+    border: none; background: var(--blue); color: #fff;
+    font-size: 0.78rem; font-weight: 600; transition: all var(--tr);
+}
+.btn-main-action:hover { background: #4a75ba; }
+.btn-main-action--pronto { background: var(--violet); }
+.btn-main-action--pronto:hover { background: #7d60b5; }
+.btn-main-action--entregue { background: var(--green); }
+.btn-main-action--entregue:hover { background: #2f9468; }
+
 .btn-detail {
-    margin-left: auto; padding: 4px 10px; border-radius: var(--radius-xs);
+    padding: 6px 10px; border-radius: var(--radius-xs);
     border: 1px solid var(--border); background: var(--bg-white);
     color: var(--text-muted); font-size: 0.78rem; transition: all var(--tr);
 }
-.btn-detail:hover { border-color: var(--rose); color: var(--text); }
+.btn-detail:hover { border-color: var(--text-muted); color: var(--text); }
+
+.kcard-badge-late {
+    background: var(--red-light); color: var(--red); padding: 2px 6px;
+    border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: auto;
+}
+.kanban-card.is-late { border-color: var(--red); border-left: 3px solid var(--red); }
+.kanban-card.is-today { border-color: var(--amber); border-left: 3px solid var(--amber); }
+.kanban-card.is-tomorrow { border-color: var(--green); border-left: 3px solid var(--green); }
 
 .kanban-loading, .kanban-empty {
     padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;
@@ -560,39 +625,38 @@ input, textarea, select { font-family: inherit; }
 .btn--whatsapp:hover { background: var(--whatsapp-dark); }
 
 /* ============================================================
-   MODAL
+   DRAWER (Painel Lateral)
    ============================================================ */
-.modal-overlay {
+.drawer-overlay {
     display: none; position: fixed; inset: 0;
-    background: rgba(44,36,32,0.35); backdrop-filter: blur(4px);
-    z-index: 200; align-items: center; justify-content: center;
+    background: rgba(44,36,32,0.35); backdrop-filter: blur(2px);
+    z-index: 200; justify-content: flex-end;
 }
-.modal-overlay.visible { display: flex; animation: fadeIn 0.2s ease; }
+.drawer-overlay.visible { display: flex; animation: fadeIn 0.2s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-.modal {
-    background: var(--bg-white); border: 1px solid var(--border);
-    border-radius: var(--radius); width: 95%; max-width: 520px; max-height: 85vh;
-    display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(44,36,32,0.15);
-    animation: scaleIn 0.25s ease;
+.drawer {
+    background: var(--bg-white); width: 100%; max-width: 480px; height: 100vh;
+    display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(44,36,32,0.1);
+    animation: slideLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
-@keyframes scaleIn { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes slideLeft { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-.modal-header {
+.drawer-header {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 18px 22px; border-bottom: 1px solid var(--border);
+    padding: 20px 24px; border-bottom: 1px solid var(--border); background: var(--bg);
 }
-.modal-header h2 { font-size: 1.05rem; }
-.modal-close {
+.drawer-header h2 { font-size: 1.1rem; }
+.drawer-close {
     background: transparent; border: none; color: var(--text-muted);
-    font-size: 1.5rem; line-height: 1; padding: 4px 8px; border-radius: 6px;
+    font-size: 1.8rem; line-height: 1; padding: 0; margin-top: -4px;
 }
-.modal-close:hover { background: var(--bg-hover); color: var(--text); }
-.modal-body { padding: 22px; overflow-y: auto; flex: 1; }
-.modal-detail-row { display: flex; gap: 10px; margin-bottom: 10px; font-size: 0.88rem; }
-.modal-detail-label { color: var(--text-muted); min-width: 110px; font-weight: 500; }
-.modal-detail-value { font-weight: 500; }
-.modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 22px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.drawer-close:hover { color: var(--text); }
+.drawer-body { padding: 24px; overflow-y: auto; flex: 1; }
+.drawer-footer { display: flex; gap: 10px; justify-content: flex-end; padding: 16px 24px; border-top: 1px solid var(--border); background: var(--bg); flex-wrap: wrap; }
+.modal-detail-row { display: flex; gap: 10px; margin-bottom: 12px; font-size: 0.9rem; }
+.modal-detail-label { color: var(--text-muted); min-width: 120px; font-weight: 500; }
+.modal-detail-value { font-weight: 500; flex: 1; }
 
 /* ============================================================
    TOAST

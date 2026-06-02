@@ -89,6 +89,29 @@ async def get_order_by_number(db: AsyncSession, order_number: int) -> Order | No
     return result.scalar_one_or_none()
 
 
+async def get_order_by_number_with_details(
+    db: AsyncSession, order_number: int, client_id: UUID | None = None
+) -> Order | None:
+    """Busca pedido pelo número legível com todos os detalhes (e filtrado por cliente, opcional)."""
+    query = (
+        select(Order)
+        .options(
+            joinedload(Order.client),
+            joinedload(Order.size),
+            joinedload(Order.filling_1),
+            joinedload(Order.filling_2),
+            joinedload(Order.finish),
+            selectinload(Order.order_extras).joinedload(OrderExtra.extra),
+        )
+        .where(Order.order_number == order_number)
+    )
+    if client_id:
+        query = query.where(Order.client_id == client_id)
+
+    result = await db.execute(query)
+    return result.unique().scalar_one_or_none()
+
+
 async def update_order_size(
     db: AsyncSession,
     order_id: UUID,

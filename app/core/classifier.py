@@ -344,13 +344,6 @@ def _classify_data(text, normalized, catalog_items, order_context):
         # Validar que não é passado
         if parsed < today:
             return ClassificationResult(trigger=SmTriggerEnum.INPUT_INVALID)
-        
-        # Validar domingo
-        if parsed.weekday() == 6:
-            return ClassificationResult(
-                trigger=SmTriggerEnum.DATE_UNAVAILABLE,
-                extra_data={"reason": "Não abrimos aos domingos"}
-            )
             
         return ClassificationResult(
             trigger=SmTriggerEnum.INPUT_VALID,
@@ -416,11 +409,11 @@ def _classify_consulta_pedido(text, normalized, catalog_items, order_context):
     if normalized in MENU_RETURN_ALIASES or normalized in GLOBAL_CANCEL_ALIASES:
         return ClassificationResult(trigger=SmTriggerEnum.INPUT_VALID, matched_value="RETURN_MENU")
 
-    num = _parse_int(normalized.replace("#", "").strip())
-    if num is not None:
+    match = re.search(r'\b(\d{3,})\b', normalized)
+    if match:
         return ClassificationResult(
             trigger=SmTriggerEnum.INPUT_VALID,
-            matched_value=str(num),
+            matched_value=match.group(1),
         )
     return ClassificationResult(trigger=SmTriggerEnum.INPUT_INVALID)
 

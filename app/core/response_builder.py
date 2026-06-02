@@ -450,6 +450,11 @@ def _build_ask_order_id(ctx, name):
 
 
 def _build_check_order(ctx, name):
+    if ctx.message_data.get("return_to_menu"):
+        items = [ResponseItem(text="Voltando ao menu principal... ⬅️")]
+        items.extend(_build_menu(ctx, name))
+        return items
+
     if ctx.order_data.get("found"):
         order = ctx.order_data["order"]
         status_map = {
@@ -463,10 +468,25 @@ def _build_check_order(ctx, name):
             "CANCELADO": "❌ Cancelado",
         }
         status_text = status_map.get(order.status.value, order.status.value)
+        date_str = order.pickup_date.strftime('%d/%m/%Y') if order.pickup_date else '—'
+        time_str = order.pickup_time.strftime('%H:%M') if order.pickup_time else '—'
+        val_str = f"R$ {order.total_value:.2f}".replace('.', ',') if order.total_value else '—'
+
+        details = ""
+        if order.size:
+            details += f"🎂 {order.size.description} · {order.dough.value if order.dough else ''}\n"
+            details += f"🥄 {order.filling_1.name if order.filling_1 else ''}"
+            if order.filling_2:
+                details += f" + {order.filling_2.name}"
+            details += "\n"
+
         items = [
             ResponseItem(text=(
                 f"📋 *Pedido #{order.order_number}*\n\n"
                 f"Status: {status_text}\n"
+                f"📅 Retirada: {date_str} às {time_str}\n"
+                f"{details}"
+                f"💰 Total: {val_str}\n"
             )),
         ]
     else:
