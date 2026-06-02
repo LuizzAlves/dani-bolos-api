@@ -461,8 +461,101 @@ input, textarea, select { font-family: inherit; }
 .capacity-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), var(--amber)); transition: width var(--tr); width: 0; }
 .capacity-text { font-size: 0.78rem; color: var(--text-muted); }
 
+.day-message-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg);
+    padding: 12px;
+    margin-bottom: 18px;
+}
+.day-message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.day-message-header h3 { font-size: 0.9rem; margin: 0; }
+.day-message-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 8px;
+    white-space: nowrap;
+}
+.day-message-badge.is-blocked {
+    color: var(--red);
+    background: rgba(220,80,80,0.08);
+    border-color: rgba(220,80,80,0.18);
+}
+.day-message-card textarea {
+    width: 100%;
+    min-height: 74px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg-white);
+    color: var(--text);
+    resize: vertical;
+    outline: none;
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+.day-message-card textarea:focus { border-color: var(--rose); }
+.day-message-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
 .day-orders h3 { font-size: 0.92rem; margin-bottom: 10px; }
-.day-orders-list { display: flex; flex-direction: column; gap: 6px; }
+.day-orders-list { display: flex; flex-direction: column; gap: 10px; }
+.day-order-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg-white);
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color var(--tr), box-shadow var(--tr), transform var(--tr);
+}
+.day-order-card:hover {
+    border-color: var(--rose);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+.day-order-card__top,
+.day-order-card__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+.day-order-card__top { margin-bottom: 7px; }
+.day-order-card__top strong {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.day-order-card__top span,
+.day-order-card__meta {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+.day-order-card__desc {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-top: 7px;
+}
+.day-order-card__fillings {
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    margin-top: 3px;
+}
 
 /* ============================================================
    NEW ORDER FORM

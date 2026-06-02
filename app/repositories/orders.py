@@ -360,6 +360,7 @@ async def list_orders_by_date(
             joinedload(Order.filling_1),
             joinedload(Order.filling_2),
             joinedload(Order.finish),
+            selectinload(Order.order_extras).joinedload(OrderExtra.extra),
         )
         .where(
             Order.pickup_date == target_date,

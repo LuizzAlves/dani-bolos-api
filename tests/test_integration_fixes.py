@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import date, time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.api.admin import create_order, list_orders
 from app.models import AlertTypeEnum, OrderStatus
+from app.repositories.orders import list_orders_by_date
 from app.schemas.admin import ManualOrderCreate
 from app.services.message_service import _alert_type_from_reason, process_message
 
@@ -55,6 +56,20 @@ async def test_list_orders_includes_finalizado():
 
     status_list_passed = mock_list_by_status.call_args[0][1]
     assert OrderStatus.FINALIZADO in status_list_passed
+
+
+async def test_list_orders_by_date_eager_loads_order_extras():
+    db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.unique.return_value.scalars.return_value.all.return_value = []
+    db.execute.return_value = mock_result
+
+    await list_orders_by_date(db, date(2026, 6, 5))
+
+    query = db.execute.call_args[0][0]
+    loader_paths = [str(getattr(option, "path", "")) for option in query._with_options]
+
+    assert any("Order.order_extras" in path and "OrderExtra.extra" in path for path in loader_paths)
 
 
 async def test_create_order_validates_dates():

@@ -252,10 +252,10 @@ async function loadCalendar() {
 
 function initCalendarNav() {
     // Remove old listeners by cloning
-    const prevEl = document.getElementById('cal-prev');
-    const nextEl = document.getElementById('cal-next');
-    prevEl.replaceWith(prevEl.cloneNode(true));
-    nextEl.replaceWith(nextEl.cloneNode(true));
+    ['cal-prev', 'cal-next', 'cap-minus', 'cap-plus', 'btn-block-day', 'btn-save-day-message'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.replaceWith(el.cloneNode(true));
+    });
 
     document.getElementById('cal-prev').addEventListener('click', () => { calM--; if(calM<0){calM=11;calY--;} loadCalendar(); });
     document.getElementById('cal-next').addEventListener('click', () => { calM++; if(calM>11){calM=0;calY++;} loadCalendar(); });
@@ -263,6 +263,7 @@ function initCalendarNav() {
     document.getElementById('cap-minus').addEventListener('click', () => adjustCapacity(-1));
     document.getElementById('cap-plus').addEventListener('click', () => adjustCapacity(1));
     document.getElementById('btn-block-day').addEventListener('click', toggleBlockDay);
+    document.getElementById('btn-save-day-message').addEventListener('click', saveDayMessage);
 }
 
 function renderCal() {
@@ -323,7 +324,15 @@ async function loadDayDetail(ds, dn) {
     document.getElementById('capacity-text').textContent = cnt + ' / ' + max + ' pedidos';
 
     const blockBtn = document.getElementById('btn-block-day');
-    blockBtn.textContent = dayInfo.blocked ? '✅ Desbloquear' : '🚫 Bloquear';
+    blockBtn.textContent = dayInfo.blocked ? 'Desbloquear' : 'Bloquear';
+
+    const msgInput = document.getElementById('day-block-message');
+    const msgStatus = document.getElementById('day-message-status');
+    if (msgInput) msgInput.value = dayInfo.block_reason || '';
+    if (msgStatus) {
+        msgStatus.textContent = dayInfo.blocked ? 'Dia bloqueado' : 'Opcional';
+        msgStatus.classList.toggle('is-blocked', !!dayInfo.blocked);
+    }
 
     // Load orders for this day
     try {
@@ -334,19 +343,24 @@ async function loadDayDetail(ds, dn) {
             return;
         }
         list.innerHTML = orders.map(o => `
-            <div class="day-order-item" data-id="${o.id}">
-                <span class="prod-time">${o.pickup_time || '—'}</span>
-                <div class="prod-info">
-                    <div class="prod-client">${o.client_name || 'Sem nome'}</div>
-                    <div class="prod-desc">${o.size_description || ''} · ${o.filling_1 || ''}${o.filling_2 ? ' + ' + o.filling_2 : ''}</div>
+            <div class="day-order-card" data-id="${o.id}">
+                <div class="day-order-card__top">
+                    <strong>${o.client_name || 'Sem nome'}</strong>
+                    <span>${o.order_number ? '#' + o.order_number : ''}</span>
                 </div>
-                <span class="prod-status prod-status--${o.status?.toLowerCase()}">${STATUS_LABELS[o.status] || o.status}</span>
+                <div class="day-order-card__meta">
+                    <span>${o.pickup_time || 'Horario pendente'}</span>
+                    <span class="prod-status prod-status--${o.status?.toLowerCase()}">${STATUS_LABELS[o.status] || o.status}</span>
+                </div>
+                <div class="day-order-card__desc">${o.size_description || 'Tamanho pendente'}${o.dough ? ' · ' + o.dough : ''}</div>
+                <div class="day-order-card__fillings">${[o.filling_1, o.filling_2].filter(Boolean).join(' + ') || 'Recheio pendente'}</div>
             </div>`).join('');
 
-        list.querySelectorAll('.day-order-item').forEach(el => {
+        list.querySelectorAll('.day-order-card').forEach(el => {
             el.addEventListener('click', () => openOrderDrawer(el.dataset.id));
         });
     } catch (e) {
+        console.error('loadDayDetail orders:', e);
         document.getElementById('day-orders-list').innerHTML = '<p class="empty-state">Erro ao carregar pedidos</p>';
     }
 }
@@ -364,19 +378,29 @@ async function adjustCapacity(delta) {
     } catch (e) { showToast('Erro: ' + e.message, 'error'); }
 }
 
+async function saveDayMessage() {
+    if (!selDay) return;
+    const message = (document.getElementById('day-block-message')?.value || '').trim();
+    try {
+        await API.updateDay(selDay, { block_reason: message });
+        await loadCalendar();
+        const dn = parseInt(selDay.split('-')[2]);
+        loadDayDetail(selDay, dn);
+        showToast('Mensagem do dia salva', 'success');
+    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+}
+
 async function toggleBlockDay() {
     if (!selDay) return;
     const dayInfo = calendarData?.days?.find(d => d.date === selDay);
     const isBlocked = dayInfo?.blocked || false;
-
-    let reason = null;
-    if (!isBlocked) {
-        reason = prompt('Opcional: Motivo do bloqueio ou mensagem para o cliente (ex: Feriado, Férias, Fechado):');
-        if (reason === null) return; // User cancelled
-    }
+    const message = (document.getElementById('day-block-message')?.value || '').trim();
 
     try {
-        await API.updateDay(selDay, { blocked: !isBlocked, block_reason: reason || (isBlocked ? null : 'Bloqueado pelo painel') });
+        await API.updateDay(selDay, {
+            blocked: !isBlocked,
+            block_reason: message || dayInfo?.block_reason || (!isBlocked ? 'Bloqueado pelo painel' : '')
+        });
         await loadCalendar();
         const dn = parseInt(selDay.split('-')[2]);
         loadDayDetail(selDay, dn);
@@ -503,7 +527,9 @@ async function loadKanban() {
 
             // Action button
             let actionBtn = '';
-            if (['AGUARDANDO_CONFIRMACAO', 'CONFIRMADO'].includes(o.status)) {
+            if (o.status === 'AGUARDANDO_CONFIRMACAO') {
+                actionBtn = `<button class="btn-main-action" data-status="CONFIRMADO" data-id="${o.id}">Confirmar</button>`;
+            } else if (o.status === 'CONFIRMADO') {
                 actionBtn = `<button class="btn-main-action" data-status="EM_PRODUCAO" data-id="${o.id}">Em Produção</button>`;
             } else if (o.status === 'EM_PRODUCAO') {
                 actionBtn = `<button class="btn-main-action btn-main-action--pronto" data-status="PRONTO" data-id="${o.id}">Pronto</button>`;
