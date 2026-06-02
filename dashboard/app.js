@@ -175,15 +175,25 @@ function initTabs() {
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
             const panel = document.getElementById('tab-' + tab);
             if (panel) { void panel.offsetWidth; panel.classList.add('active'); }
-            document.getElementById('sidebar').classList.remove('open');
+            closeSidebar();
         });
     });
 }
 
 function initSidebar() {
     document.getElementById('sidebar-toggle').addEventListener('click', () => {
-        document.getElementById('sidebar').classList.toggle('open');
+        const sidebar = document.getElementById('sidebar');
+        const isOpen = sidebar.classList.toggle('open');
+        document.getElementById('sidebar-backdrop')?.classList.toggle('visible', isOpen);
+        document.body.classList.toggle('sidebar-visible', isOpen);
     });
+    document.getElementById('sidebar-backdrop')?.addEventListener('click', closeSidebar);
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-backdrop')?.classList.remove('visible');
+    document.body.classList.remove('sidebar-visible');
 }
 
 function initDate() {
