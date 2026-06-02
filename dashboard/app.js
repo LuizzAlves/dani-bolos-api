@@ -61,6 +61,7 @@ const API = {
 let calY, calM, selDay = null;
 let calendarData = null;
 let catalogCache = null;
+let historyCache = [];
 
 const MN = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DL = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -95,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDate();
     initDrawer();
     initKanbanFilters();
+    initHistoryFilters();
 
     if (API.token) {
         tryAuth();
@@ -152,6 +154,7 @@ function loadAll() {
     loadDashboard();
     loadKanban();
     loadCalendar();
+    loadHistory();
     loadCatalogForForm();
     loadAlerts();
     loadCatalogTab('tamanhos');
@@ -573,7 +576,7 @@ async function loadKanban() {
                 try {
                     await API.updateStatus(o.id, ns);
                     showToast('Status atualizado para ' + STATUS_LABELS[ns], 'success');
-                    loadKanban(); loadDashboard();
+                    loadKanban(); loadDashboard(); loadHistory();
                 } catch(err) { showToast('Erro: ' + err.message, 'error'); }
             });
 
@@ -595,7 +598,7 @@ async function loadKanban() {
                     try {
                         await API.updateStatus(id, targetStatus);
                         showToast('Movido para ' + STATUS_LABELS[targetStatus], 'success');
-                        loadKanban(); loadDashboard();
+                        loadKanban(); loadDashboard(); loadHistory();
                     } catch(err) { showToast('Erro: ' + err.message, 'error'); }
                 }
             });
@@ -622,6 +625,114 @@ function fmtDate(s) {
     if (!s) return '—';
     const [y, m, d] = s.split('-');
     return d + '/' + m;
+}
+
+function fmtFullDate(s) {
+    if (!s) return '---';
+    const [y, m, d] = s.split('-');
+    return d + '/' + m + '/' + y;
+}
+
+// ============================================================
+// HISTORICO
+// ============================================================
+function initHistoryFilters() {
+    document.getElementById('history-search-input')?.addEventListener('input', renderHistory);
+    document.getElementById('history-status-filter')?.addEventListener('change', renderHistory);
+    document.getElementById('history-refresh')?.addEventListener('click', loadHistory);
+}
+
+async function loadHistory() {
+    const list = document.getElementById('history-list');
+    if (list) list.innerHTML = '<div class="kanban-loading">Carregando historico...</div>';
+
+    try {
+        const orders = await API.getOrders('status=FINALIZADO,CANCELADO');
+        historyCache = orders.sort((a, b) => {
+            const ad = a.pickup_date || a.created_at || '';
+            const bd = b.pickup_date || b.created_at || '';
+            if (bd !== ad) return bd.localeCompare(ad);
+            return (b.order_number || 0) - (a.order_number || 0);
+        });
+        updateHistorySummary(historyCache);
+        renderHistory();
+    } catch (e) {
+        console.error('loadHistory:', e);
+        if (list) list.innerHTML = '<div class="kanban-empty">Erro ao carregar historico</div>';
+    }
+}
+
+function updateHistorySummary(orders) {
+    const finalizados = orders.filter(o => o.status === 'FINALIZADO');
+    const cancelados = orders.filter(o => o.status === 'CANCELADO');
+    const valor = finalizados.reduce((sum, o) => sum + parseFloat(o.total_value || 0), 0);
+
+    const fEl = document.getElementById('hist-finalizados');
+    const cEl = document.getElementById('hist-cancelados');
+    const vEl = document.getElementById('hist-valor');
+    if (fEl) fEl.textContent = finalizados.length;
+    if (cEl) cEl.textContent = cancelados.length;
+    if (vEl) vEl.textContent = 'R$ ' + valor.toFixed(2).replace('.', ',');
+}
+
+function renderHistory() {
+    const list = document.getElementById('history-list');
+    if (!list) return;
+
+    const term = (document.getElementById('history-search-input')?.value || '').toLowerCase();
+    const status = document.getElementById('history-status-filter')?.value || 'all';
+    const filtered = historyCache.filter(o => {
+        const haystack = [
+            o.order_number, o.client_name, o.client_phone, o.size_description,
+            o.dough, o.filling_1, o.filling_2, o.status
+        ].filter(Boolean).join(' ').toLowerCase();
+        const matchesTerm = !term || haystack.includes(term);
+        const matchesStatus = status === 'all' || o.status === status;
+        return matchesTerm && matchesStatus;
+    });
+
+    if (!filtered.length) {
+        list.innerHTML = '<div class="empty-state"><p>Nenhum pedido encontrado no historico</p></div>';
+        return;
+    }
+
+    list.innerHTML = filtered.map(o => {
+        const statusClass = (o.status || '').toLowerCase();
+        const statusLabel = STATUS_LABELS[o.status] || o.status || '---';
+        const total = o.total_value ? 'R$ ' + Number(o.total_value).toFixed(2).replace('.', ',') : '---';
+        return `
+            <div class="history-card history-card--${statusClass}" data-id="${o.id}">
+                <div class="history-card__top">
+                    <div>
+                        <strong>#${o.order_number || '---'}</strong>
+                        <span>${o.client_name || 'Sem nome'}</span>
+                    </div>
+                    <span class="history-status history-status--${statusClass}">${statusLabel}</span>
+                </div>
+                <div class="history-card__meta">
+                    <span>${fmtFullDate(o.pickup_date)} as ${o.pickup_time || '---'}</span>
+                    <span>${o.client_phone || ''}</span>
+                </div>
+                <div class="history-card__details">
+                    <span>${o.size_description || 'Tamanho pendente'}${o.dough ? ' · ' + o.dough : ''}</span>
+                    <span>${[o.filling_1, o.filling_2].filter(Boolean).join(' + ') || 'Recheio pendente'}</span>
+                </div>
+                <div class="history-card__footer">
+                    <span>${total}</span>
+                    <button class="btn-detail history-detail" data-id="${o.id}">Detalhes</button>
+                </div>
+            </div>`;
+    }).join('');
+
+    list.querySelectorAll('.history-card').forEach(card => {
+        card.addEventListener('click', () => openOrderDrawer(card.dataset.id));
+    });
+    list.querySelectorAll('.history-detail').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            openOrderDrawer(btn.dataset.id);
+        });
+    });
 }
 
 // ============================================================
@@ -673,6 +784,7 @@ async function openOrderDrawer(orderId) {
                     closeDrawer();
                     loadKanban();
                     loadDashboard();
+                    loadHistory();
                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
             });
         });

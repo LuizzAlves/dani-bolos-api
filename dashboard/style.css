@@ -409,6 +409,150 @@ input, textarea, select { font-family: inherit; }
 }
 
 /* ============================================================
+   HISTORICO
+   ============================================================ */
+.history-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+}
+.history-stat {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--green);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    box-shadow: var(--shadow-sm);
+}
+.history-stat--cancelled { border-left-color: var(--red); }
+.history-stat--value { border-left-color: var(--teal); }
+.history-stat-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    margin-bottom: 4px;
+}
+.history-stat strong {
+    font-size: 1.35rem;
+    color: var(--text);
+}
+.history-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 220px auto;
+    gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+}
+.history-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+.history-search .search-icon {
+    position: absolute;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+}
+.history-search input,
+.history-filter {
+    width: 100%;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    background: var(--bg-white);
+    color: var(--text);
+    font-size: 0.84rem;
+    outline: none;
+}
+.history-search input { padding: 0 12px 0 36px; }
+.history-filter { padding: 0 12px; }
+.history-search input:focus,
+.history-filter:focus { border-color: var(--rose); }
+.history-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+}
+.history-card {
+    background: var(--bg-white);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--green);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--tr), box-shadow var(--tr), transform var(--tr);
+}
+.history-card--cancelado { border-left-color: var(--red); }
+.history-card:hover {
+    border-color: var(--rose);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+.history-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+.history-card__top div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.history-card__top strong { color: var(--rose); font-size: 0.86rem; }
+.history-card__top span:not(.history-status) {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.history-status {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: var(--green-light);
+    color: var(--green);
+}
+.history-status--cancelado {
+    background: var(--red-light);
+    color: var(--red);
+}
+.history-card__meta,
+.history-card__details {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+.history-card__details {
+    color: var(--text-secondary);
+    margin-top: 9px;
+}
+.history-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+.history-card__footer span {
+    color: var(--green);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+/* ============================================================
    AGENDA
    ============================================================ */
 .agenda-layout { display: grid; grid-template-columns: 1fr 360px; gap: 18px; }
@@ -773,6 +917,8 @@ input, textarea, select { font-family: inherit; }
     .agenda-layout { grid-template-columns: 1fr; }
     .dashboard-grid { grid-template-columns: 1fr; }
     .config-grid { grid-template-columns: 1fr; }
+    .history-summary { grid-template-columns: 1fr; }
+    .history-toolbar { grid-template-columns: 1fr; }
     .flow-control-row { flex-direction: column; align-items: flex-start; }
 }
 @media (max-width: 768px) {
