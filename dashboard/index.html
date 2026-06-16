@@ -366,7 +366,7 @@
                     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
                         <h2>Adicionar Bolo Pronto</h2>
                     </div>
-                    <form id="ready-cake-form" class="new-order-form" autocomplete="off" style="display: grid; gap: 16px;">
+                    <form id="ready-cake-form" class="new-order-form" autocomplete="off" onsubmit="event.preventDefault(); submitReadyCakeForm(this);" style="display: grid; gap: 16px;">
                         <div class="form-row">
                             <div class="form-field">
                                 <label for="rc-flavor">Sabor/Nome *</label>

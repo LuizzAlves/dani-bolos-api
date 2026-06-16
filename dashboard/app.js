@@ -167,7 +167,6 @@ function loadAll() {
     initCatalogTabs();
     loadSettings();
     loadReadyCakes();
-    initReadyCakesForm();
     startPolling();
 }
 
@@ -1442,27 +1441,21 @@ async function loadReadyCakes() {
     }
 }
 
-function initReadyCakesForm() {
-    const form = document.getElementById('ready-cake-form');
-    if (!form) return;
+window.submitReadyCakeForm = async function(form) {
+    const flavor = document.getElementById('rc-flavor').value.trim();
+    const priceVal = document.getElementById('rc-price').value;
+    const description = document.getElementById('rc-description').value.trim() || null;
+    const price = priceVal ? parseFloat(priceVal) : null;
 
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const flavor = document.getElementById('rc-flavor').value.trim();
-        const priceVal = document.getElementById('rc-price').value;
-        const description = document.getElementById('rc-description').value.trim() || null;
-        const price = priceVal ? parseFloat(priceVal) : null;
-
-        try {
-            await API.createReadyCake({ flavor, price, description });
-            showToast('Bolo pronto adicionado! 🎂', 'success');
-            form.reset();
-            loadReadyCakes();
-        } catch (err) {
-            showToast('Erro ao criar bolo pronto: ' + err.message, 'error');
-        }
-    });
-}
+    try {
+        await API.createReadyCake({ flavor, price, description });
+        showToast('Bolo pronto adicionado! 🎂', 'success');
+        form.reset();
+        loadReadyCakes();
+    } catch (err) {
+        showToast('Erro ao criar bolo pronto: ' + err.message, 'error');
+    }
+};
 
 window.toggleReadyCakeAvailability = async function(id, available) {
     try {
