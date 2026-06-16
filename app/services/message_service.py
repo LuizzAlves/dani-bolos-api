@@ -57,6 +57,8 @@ def _is_expired(dt: datetime | None) -> bool:
 def _alert_type_from_reason(reason: str | None) -> AlertTypeEnum:
     """Classifica o tipo de alerta administrativo a partir do motivo."""
     reason_lower = (reason or "").lower()
+    if "pronta entrega" in reason_lower or "bolo pronto" in reason_lower:
+        return AlertTypeEnum.READY_CAKE_INTEREST
     if any(kw in reason_lower for kw in ["adicional", "finaliza", "aprova", "personalizado"]):
         return AlertTypeEnum.CUSTOM_FILLING
     if any(kw in reason_lower for kw in ["humano", "atendente", "falar com a dani"]):
@@ -548,6 +550,7 @@ async def _handle_global_navigation_command(
         ConversationState.PESQUISA,
         ConversationState.PESQUISA_VALORES,
         ConversationState.CONSULTA_PEDIDO,
+        ConversationState.PRONTA_ENTREGA,
         ConversationState.MENU_PRINCIPAL,
     }:
         if wants_cancel and conversation.state == ConversationState.CONSULTA_PEDIDO:
@@ -818,6 +821,12 @@ async def _load_catalog_for_state(db: AsyncSession, state: ConversationState, ac
             from app.core.service_hours import filter_time_slots
             items = await filter_time_slots(db, active_order.pickup_date, items)
         return items
+
+    # Bolos prontos para o estado PRONTA_ENTREGA
+    if state == ConversationState.PRONTA_ENTREGA:
+        from app.repositories import ready_cakes as rc_repo
+        return await rc_repo.get_available_ready_cakes(db)
+
     return []
 
 
@@ -841,6 +850,8 @@ def _determine_flow(state: ConversationState) -> ActiveFlowType:
         return ActiveFlowType.PEDIDO
     elif state == ConversationState.CONSULTA_PEDIDO:
         return ActiveFlowType.CONSULTA
+    elif state == ConversationState.PRONTA_ENTREGA:
+        return ActiveFlowType.PRONTA_ENTREGA
     elif state in {ConversationState.ATENDIMENTO_HUMANO, ConversationState.BOT_PAUSADO}:
         return ActiveFlowType.ATENDIMENTO_HUMANO
     return ActiveFlowType.NENHUM

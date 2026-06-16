@@ -238,3 +238,56 @@ async def update_sweet(db: AsyncSession, sweet_id: int, data: dict) -> bool:
     )
     await db.flush()
     return result.rowcount > 0
+
+
+# ============================================================
+# CREATE / DELETE — Gestão completa pelo painel
+# ============================================================
+
+from sqlalchemy import delete as sa_delete
+from decimal import Decimal
+
+
+async def create_catalog_item(db: AsyncSession, catalog_type: str, data: dict):
+    """Cria um novo item de catálogo. Retorna o item criado."""
+    model_map = {
+        "sizes": Size,
+        "fillings": Filling,
+        "extras": Extra,
+        "finishes": Finish,
+        "sweets": Sweet,
+    }
+    model = model_map.get(catalog_type)
+    if not model:
+        return None
+
+    # Converter campos numéricos
+    for field in ("price_white", "price_chocolate", "price_per_layer", "price", "weight_kg"):
+        if field in data and data[field] is not None:
+            data[field] = Decimal(str(data[field]))
+
+    item = model(**data)
+    db.add(item)
+    await db.flush()
+    return item
+
+
+async def delete_catalog_item(db: AsyncSession, catalog_type: str, item_id: int) -> bool:
+    """Remove um item do catálogo. Retorna True se encontrou."""
+    model_map = {
+        "sizes": Size,
+        "fillings": Filling,
+        "extras": Extra,
+        "finishes": Finish,
+        "sweets": Sweet,
+    }
+    model = model_map.get(catalog_type)
+    if not model:
+        return False
+
+    result = await db.execute(
+        sa_delete(model).where(model.id == item_id)
+    )
+    await db.flush()
+    return result.rowcount > 0
+

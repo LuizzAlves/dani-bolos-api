@@ -42,6 +42,7 @@ class ConversationState(str, enum.Enum):
     DEFININDO_OBSERVACOES = "DEFININDO_OBSERVACOES"
     CONFIRMANDO_PEDIDO = "CONFIRMANDO_PEDIDO"
     CONSULTA_PEDIDO = "CONSULTA_PEDIDO"
+    PRONTA_ENTREGA = "PRONTA_ENTREGA"
     ATENDIMENTO_HUMANO = "ATENDIMENTO_HUMANO"
     BOT_PAUSADO = "BOT_PAUSADO"
 
@@ -53,6 +54,7 @@ class ActiveFlowType(str, enum.Enum):
     PESQUISA = "PESQUISA"
     PEDIDO = "PEDIDO"
     CONSULTA = "CONSULTA"
+    PRONTA_ENTREGA = "PRONTA_ENTREGA"
     ATENDIMENTO_HUMANO = "ATENDIMENTO_HUMANO"
 
 
@@ -113,6 +115,7 @@ class SmTriggerEnum(str, enum.Enum):
     OPTION_2 = "OPTION_2"
     OPTION_3 = "OPTION_3"
     OPTION_4 = "OPTION_4"
+    OPTION_5 = "OPTION_5"
     NEW_CLIENT_REGISTERED = "NEW_CLIENT_REGISTERED"
     HUMAN_REQUESTED = "HUMAN_REQUESTED"
     MAX_FALLBACK_REACHED = "MAX_FALLBACK_REACHED"
@@ -157,6 +160,8 @@ class SmActionEnum(str, enum.Enum):
     ASK_HUMAN_REASON = "ASK_HUMAN_REASON"
     PAUSE_BOT_AND_NOTIFY_HUMAN = "PAUSE_BOT_AND_NOTIFY_HUMAN"
     RESUME_BOT = "RESUME_BOT"
+    SHOW_READY_CAKES = "SHOW_READY_CAKES"
+    RESERVE_READY_CAKE_INTEREST = "RESERVE_READY_CAKE_INTEREST"
 
 
 class FallbackEffectEnum(str, enum.Enum):
@@ -472,6 +477,7 @@ class AlertTypeEnum(str, enum.Enum):
     INTERPRETATION_ERROR = "INTERPRETATION_ERROR"
     FLOW_ERROR = "FLOW_ERROR"
     MAX_FALLBACK = "MAX_FALLBACK"
+    READY_CAKE_INTEREST = "READY_CAKE_INTEREST"
 
 
 # ============================================================
@@ -507,4 +513,16 @@ class AdminSetting(Base):
 
     key = mapped_column(String(100), primary_key=True)
     value = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
+
+
+class ReadyCake(Base):
+    __tablename__ = "ready_cakes"
+
+    id = mapped_column(Integer, primary_key=True, autoincrement=True)
+    flavor = mapped_column(String(255), nullable=False)
+    description = mapped_column(Text, nullable=True)
+    price = mapped_column(Numeric(10, 2), nullable=True)
+    available = mapped_column(Boolean, nullable=False, default=True)
+    created_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))
     updated_at = mapped_column(DateTime(timezone=True), server_default=text("NOW()"))

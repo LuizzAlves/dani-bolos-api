@@ -49,6 +49,8 @@ def build_response(
         SmActionEnum.ASK_HUMAN_REASON: _build_ask_human,
         SmActionEnum.PAUSE_BOT_AND_NOTIFY_HUMAN: _build_pause,
         SmActionEnum.RESUME_BOT: _build_resume,
+        SmActionEnum.SHOW_READY_CAKES: _build_show_ready_cakes,
+        SmActionEnum.RESERVE_READY_CAKE_INTEREST: _build_reserve_interest,
     }
 
     builder = builders.get(action_code)
@@ -92,7 +94,8 @@ def _build_welcome_menu(ctx, name):
             "1️⃣ Pesquisar Catálogo\n"
             "2️⃣ Fazer Pedido\n"
             "3️⃣ Consultar Pedido\n"
-            "4️⃣ Falar com a Dani\n\n"
+            "4️⃣ Falar com a Dani\n"
+            "5️⃣ Bolos Prontos do Dia\n\n"
             "📝 _Digite o número da opção desejada._"
         )),
     ]
@@ -107,7 +110,8 @@ def _build_menu(ctx, name):
             "1️⃣ Pesquisar Catálogo\n"
             "2️⃣ Fazer Pedido\n"
             "3️⃣ Consultar Pedido\n"
-            "4️⃣ Falar com a Dani\n\n"
+            "4️⃣ Falar com a Dani\n"
+            "5️⃣ Bolos Prontos do Dia\n\n"
             "📝 _Digite o número da opção desejada._"
         )),
     ]
@@ -536,3 +540,49 @@ def _build_resume(ctx, name):
     ]
     items.extend(_build_menu(ctx, name))
     return items
+
+
+def _build_show_ready_cakes(ctx, name):
+    """Lista bolos prontos disponíveis."""
+    if ctx.message_data.get("no_ready_cakes"):
+        items = [ResponseItem(text=(
+            "🎂 *Bolos Prontos do Dia*\n\n"
+            "No momento não temos bolos prontos disponíveis. 😢\n\n"
+            "Mas você pode fazer uma encomenda personalizada pelo menu!\n"
+        ))]
+        items.extend(_build_menu(ctx, name))
+        return items
+
+    cakes = ctx.catalog_items
+    text = "🎂 *Bolos Prontos do Dia*\n\n"
+    text += "Confira os bolos disponíveis para retirada:\n\n"
+    for i, c in enumerate(cakes, 1):
+        price_str = f" — R$ {c.price:.2f}".replace('.', ',') if c.price else " — consulte o valor"
+        desc_str = f"\n   _{c.description}_" if c.description else ""
+        text += f"*{i}.* {c.flavor}{price_str}{desc_str}\n"
+    text += (
+        "\n📝 _Digite o número do bolo que te interessou._\n"
+        "A Dani vai entrar em contato para combinar a retirada! 😊\n"
+        "\nDigite *menu* para voltar."
+    )
+    return [ResponseItem(text=text)]
+
+
+def _build_reserve_interest(ctx, name):
+    """Confirmação de interesse em bolo pronto."""
+    if ctx.message_data.get("return_to_menu"):
+        items = [ResponseItem(text="Voltando ao menu principal... ⬅️")]
+        items.extend(_build_menu(ctx, name))
+        return items
+
+    cake = ctx.order_data.get("ready_cake")
+    cake_info = f" *{cake.flavor}*" if cake else ""
+    return [
+        ResponseItem(text=(
+            f"✅ Anotado! Você demonstrou interesse no bolo{cake_info}.\n\n"
+            "A *Dani* vai te chamar aqui pelo WhatsApp para combinar a retirada. 😊\n\n"
+            "⏳ O bot ficará pausado até ela assumir o atendimento.\n"
+            "Obrigada pela preferência! 🎂💕"
+        )),
+    ]
+

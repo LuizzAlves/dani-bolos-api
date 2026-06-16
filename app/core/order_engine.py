@@ -251,6 +251,8 @@ async def execute_action(
         SmActionEnum.ASK_HUMAN_REASON: _handle_ask_human_reason,
         SmActionEnum.PAUSE_BOT_AND_NOTIFY_HUMAN: _handle_pause_bot,
         SmActionEnum.RESUME_BOT: _handle_resume_bot,
+        SmActionEnum.SHOW_READY_CAKES: _handle_show_ready_cakes,
+        SmActionEnum.RESERVE_READY_CAKE_INTEREST: _handle_reserve_ready_cake_interest,
     }
 
     handler = handlers.get(action_code)
@@ -804,3 +806,49 @@ async def _handle_resume_bot(db, ctx, conversation_id, client_id, classification
         db, EventTypeEnum.BOT_RESUMED,
         conversation_id=conversation_id,
     )
+
+
+async def _handle_show_ready_cakes(db, ctx, conversation_id, client_id, classification, order_id):
+    """Carrega bolos prontos disponíveis."""
+    from app.repositories import ready_cakes as rc_repo
+    cakes = await rc_repo.get_available_ready_cakes(db)
+    ctx.catalog_items = cakes
+    if not cakes:
+        ctx.message_data["no_ready_cakes"] = True
+        ctx.message_data["return_to_menu"] = True
+
+
+async def _handle_reserve_ready_cake_interest(db, ctx, conversation_id, client_id, classification, order_id):
+    """
+    Registra intenção de reservar bolo pronto.
+    NÃO cria pedido — apenas cria alerta para a Dani.
+    """
+    if classification.matched_value == "RETURN_MENU":
+        ctx.message_data["return_to_menu"] = True
+        return
+
+    from app.repositories import ready_cakes as rc_repo
+    cake = None
+    if classification.matched_id:
+        cake = await rc_repo.get_ready_cake_by_id(db, classification.matched_id)
+
+    if cake:
+        ctx.message_data["create_alert"] = True
+        ctx.message_data["alert_reason"] = (
+            f"Interesse em bolo pronta entrega: {cake.flavor}"
+            f"{' — R$ ' + str(cake.price) if cake.price else ''}"
+        )
+        ctx.message_data["alert_type"] = "READY_CAKE_INTEREST"
+        ctx.order_data["ready_cake"] = cake
+        await event_repo.log_event(
+            db, EventTypeEnum.MESSAGE_SENT,
+            conversation_id=conversation_id,
+            payload={
+                "action": "READY_CAKE_INTEREST",
+                "cake_id": cake.id,
+                "cake_flavor": cake.flavor,
+            },
+        )
+    else:
+        ctx.message_data["return_to_menu"] = True
+

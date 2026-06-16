@@ -51,6 +51,12 @@ const API = {
     resolveAlert(id) { return this.patch('/alerts/' + id + '/resolve', {}); },
     getCatalog() { return this.get('/catalog'); },
     updateCatalogItem(t, id, d) { return this.patch('/catalog/' + t + '/' + id, { data: d }); },
+    createCatalogItem(t, d) { return this.post('/catalog/' + t, d); },
+    deleteCatalogItem(t, id) { return this.fetch('/catalog/' + t + '/' + id, { method: 'DELETE' }); },
+    getReadyCakes() { return this.get('/ready-cakes'); },
+    createReadyCake(d) { return this.post('/ready-cakes', d); },
+    updateReadyCake(id, d) { return this.patch('/ready-cakes/' + id, d); },
+    deleteReadyCake(id) { return this.fetch('/ready-cakes/' + id, { method: 'DELETE' }); },
     getSettings() { return this.get('/settings'); },
     saveSettings(d) { return this.patch('/settings', { settings: d }); },
 };
@@ -160,6 +166,8 @@ function loadAll() {
     loadCatalogTab('tamanhos');
     initCatalogTabs();
     loadSettings();
+    loadReadyCakes();
+    initReadyCakesForm();
     startPolling();
 }
 
@@ -941,6 +949,7 @@ async function loadAlerts() {
                 INTERPRETATION_ERROR: '❓ Erro de Interpretação',
                 FLOW_ERROR: '⚠️ Erro no Fluxo',
                 MAX_FALLBACK: '🔄 Máximo de Tentativas',
+                READY_CAKE_INTEREST: '🎂 Interesse Pronta Entrega',
             };
             return `
             <div class="alert-item" data-id="${a.id}">
@@ -1022,37 +1031,159 @@ function tog(on) { return '<label class="toggle"><input type="checkbox" ' + (on 
 function inputNum(val, cls, step='0.01') { return `<input type="number" step="${step}" class="inline-edit ${cls}" value="${val}" style="width: 80px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; text-align: right;">`; }
 
 function renderSizes() {
-    if (!catalogCache?.sizes?.length) return '<p class="p-4">Nenhum tamanho cadastrado</p>';
-    return '<table class="catalog-table"><thead><tr><th>#</th><th>Descrição</th><th>Peso</th><th>Fatias</th><th>Forma</th><th>Branca (R$)</th><th>Chocolate (R$)</th><th>Ativo</th></tr></thead><tbody>' +
-        catalogCache.sizes.map(s => `<tr data-id="${s.id}"><td>${s.id}</td><td>${s.description}</td><td>${s.weight_kg} kg</td><td>${s.servings}</td><td>${s.shape || ''}</td><td>${inputNum(Number(s.price_white).toFixed(2), 'edit-pw')}</td><td>${inputNum(Number(s.price_chocolate).toFixed(2), 'edit-pc')}</td><td>${tog(s.active)}</td></tr>`).join('') +
+    let html = `
+    <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn btn--primary btn--sm" onclick="toggleAddForm('sizes')">➕ Novo Tamanho</button>
+        <div id="form-add-sizes" style="display:none; margin-top:12px; padding:16px; border:1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);">
+            <h3 style="font-size:0.9rem; margin-bottom:10px;">Adicionar Novo Tamanho</h3>
+            <form id="form-new-size" onsubmit="event.preventDefault(); submitNewCatalogItem('sizes', this);" style="display:grid; gap:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:150px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Descrição *</label><input type="text" name="description" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:80px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Peso (kg) *</label><input type="number" step="0.001" name="weight_kg" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:70px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Fatias *</label><input type="number" name="servings" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:120px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Forma *</label><select name="shape" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"><option value="REDONDA">REDONDA</option><option value="RETANGULAR">RETANGULAR</option></select></div>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1;"><label style="font-size:0.75rem; color:var(--text-secondary);">Preço Massa Branca *</label><input type="number" step="0.01" name="price_white" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="flex:1;"><label style="font-size:0.75rem; color:var(--text-secondary);">Preço Massa Chocolate *</label><input type="number" step="0.01" name="price_chocolate" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:5px;">
+                    <button type="button" class="btn btn--outline btn--sm" onclick="toggleAddForm('sizes')">Cancelar</button>
+                    <button type="submit" class="btn btn--primary btn--sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    `;
+
+    if (!catalogCache?.sizes?.length) {
+        return html + '<p class="p-4">Nenhum tamanho cadastrado</p>';
+    }
+
+    return html + '<table class="catalog-table"><thead><tr><th>#</th><th>Descrição</th><th>Peso</th><th>Fatias</th><th>Forma</th><th>Branca (R$)</th><th>Chocolate (R$)</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>' +
+        catalogCache.sizes.map(s => `<tr data-id="${s.id}"><td>${s.id}</td><td>${s.description}</td><td>${s.weight_kg} kg</td><td>${s.servings}</td><td>${s.shape || ''}</td><td>${inputNum(Number(s.price_white).toFixed(2), 'edit-pw')}</td><td>${inputNum(Number(s.price_chocolate).toFixed(2), 'edit-pc')}</td><td>${tog(s.active)}</td><td><button class="btn btn--danger btn--sm" style="padding:4px 8px;" onclick="deleteCatalogItemClick('sizes', ${s.id}, '${s.description.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`).join('') +
         '</tbody></table>';
 }
 
 function renderFillings() {
-    if (!catalogCache?.fillings?.length) return '<p class="p-4">Nenhum recheio cadastrado</p>';
-    return '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Disponível</th></tr></thead><tbody>' +
-        catalogCache.fillings.map(f => `<tr data-id="${f.id}"><td>${f.id}</td><td>${f.name}</td><td>${tog(f.available)}</td></tr>`).join('') +
+    let html = `
+    <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn btn--primary btn--sm" onclick="toggleAddForm('fillings')">➕ Novo Recheio</button>
+        <div id="form-add-fillings" style="display:none; margin-top:12px; padding:16px; border:1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);">
+            <h3 style="font-size:0.9rem; margin-bottom:10px;">Adicionar Novo Recheio</h3>
+            <form id="form-new-filling" onsubmit="event.preventDefault(); submitNewCatalogItem('fillings', this);" style="display:grid; gap:10px;">
+                <div><label style="font-size:0.75rem; color:var(--text-secondary);">Nome *</label><input type="text" name="name" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:5px;">
+                    <button type="button" class="btn btn--outline btn--sm" onclick="toggleAddForm('fillings')">Cancelar</button>
+                    <button type="submit" class="btn btn--primary btn--sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    `;
+
+    if (!catalogCache?.fillings?.length) {
+        return html + '<p class="p-4">Nenhum recheio cadastrado</p>';
+    }
+
+    return html + '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Disponível</th><th>Ações</th></tr></thead><tbody>' +
+        catalogCache.fillings.map(f => `<tr data-id="${f.id}"><td>${f.id}</td><td>${f.name}</td><td>${tog(f.available)}</td><td><button class="btn btn--danger btn--sm" style="padding:4px 8px;" onclick="deleteCatalogItemClick('fillings', ${f.id}, '${f.name.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`).join('') +
         '</tbody></table>';
 }
 
 function renderExtras() {
-    if (!catalogCache?.extras?.length) return '<p class="p-4">Nenhum adicional cadastrado</p>';
-    return '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>R$/Camada</th><th>Aprovação</th><th>Ativo</th></tr></thead><tbody>' +
-        catalogCache.extras.map(e => `<tr data-id="${e.id}"><td>${e.id}</td><td>${e.name}</td><td>${inputNum(Number(e.price_per_layer).toFixed(2), 'edit-ppl')}</td><td><label><input type="checkbox" class="edit-req" ${e.requires_approval ? 'checked' : ''}> Sim</label></td><td>${tog(e.active)}</td></tr>`).join('') +
+    let html = `
+    <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn btn--primary btn--sm" onclick="toggleAddForm('extras')">➕ Novo Adicional</button>
+        <div id="form-add-extras" style="display:none; margin-top:12px; padding:16px; border:1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);">
+            <h3 style="font-size:0.9rem; margin-bottom:10px;">Adicionar Novo Adicional</h3>
+            <form id="form-new-extra" onsubmit="event.preventDefault(); submitNewCatalogItem('extras', this);" style="display:grid; gap:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:150px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Nome *</label><input type="text" name="name" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:100px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Preço/Camada *</label><input type="number" step="0.01" name="price_per_layer" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                </div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <label style="font-size:0.85rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;"><input type="checkbox" name="requires_approval"> Exige aprovação manual?</label>
+                </div>
+                <div><label style="font-size:0.75rem; color:var(--text-secondary);">Descrição</label><input type="text" name="description" style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:5px;">
+                    <button type="button" class="btn btn--outline btn--sm" onclick="toggleAddForm('extras')">Cancelar</button>
+                    <button type="submit" class="btn btn--primary btn--sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    `;
+
+    if (!catalogCache?.extras?.length) {
+        return html + '<p class="p-4">Nenhum adicional cadastrado</p>';
+    }
+
+    return html + '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>R$/Camada</th><th>Aprovação</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>' +
+        catalogCache.extras.map(e => `<tr data-id="${e.id}"><td>${e.id}</td><td>${e.name}</td><td>${inputNum(Number(e.price_per_layer).toFixed(2), 'edit-ppl')}</td><td><label><input type="checkbox" class="edit-req" ${e.requires_approval ? 'checked' : ''}> Sim</label></td><td>${tog(e.active)}</td><td><button class="btn btn--danger btn--sm" style="padding:4px 8px;" onclick="deleteCatalogItemClick('extras', ${e.id}, '${e.name.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`).join('') +
         '</tbody></table>';
 }
 
 function renderFinishes() {
-    if (!catalogCache?.finishes?.length) return '<p class="p-4">Nenhuma finalização cadastrada</p>';
-    return '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Custo Extra</th><th>Aprovação</th><th>Ativa</th></tr></thead><tbody>' +
-        catalogCache.finishes.map(f => `<tr data-id="${f.id}"><td>${f.id}</td><td>${f.name}</td><td><label><input type="checkbox" class="edit-cost" ${f.has_extra_cost ? 'checked' : ''}> Sim</label></td><td><label><input type="checkbox" class="edit-req" ${f.requires_approval ? 'checked' : ''}> Sim</label></td><td>${tog(f.active)}</td></tr>`).join('') +
+    let html = `
+    <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn btn--primary btn--sm" onclick="toggleAddForm('finishes')">➕ Nova Finalização</button>
+        <div id="form-add-finishes" style="display:none; margin-top:12px; padding:16px; border:1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);">
+            <h3 style="font-size:0.9rem; margin-bottom:10px;">Adicionar Nova Finalização</h3>
+            <form id="form-new-finish" onsubmit="event.preventDefault(); submitNewCatalogItem('finishes', this);" style="display:grid; gap:10px;">
+                <div><label style="font-size:0.75rem; color:var(--text-secondary);">Nome *</label><input type="text" name="name" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                <div style="display:flex; gap:15px; flex-wrap:wrap;">
+                    <label style="font-size:0.85rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;"><input type="checkbox" name="has_extra_cost"> Tem custo extra?</label>
+                    <label style="font-size:0.85rem; color:var(--text-secondary); display:flex; align-items:center; gap:6px;"><input type="checkbox" name="requires_approval"> Exige aprovação manual?</label>
+                </div>
+                <div><label style="font-size:0.75rem; color:var(--text-secondary);">Descrição</label><input type="text" name="description" style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:5px;">
+                    <button type="button" class="btn btn--outline btn--sm" onclick="toggleAddForm('finishes')">Cancelar</button>
+                    <button type="submit" class="btn btn--primary btn--sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    `;
+
+    if (!catalogCache?.finishes?.length) {
+        return html + '<p class="p-4">Nenhuma finalização cadastrada</p>';
+    }
+
+    return html + '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Custo Extra</th><th>Aprovação</th><th>Ativa</th><th>Ações</th></tr></thead><tbody>' +
+        catalogCache.finishes.map(f => `<tr data-id="${f.id}"><td>${f.id}</td><td>${f.name}</td><td><label><input type="checkbox" class="edit-cost" ${f.has_extra_cost ? 'checked' : ''}> Sim</label></td><td><label><input type="checkbox" class="edit-req" ${f.requires_approval ? 'checked' : ''}> Sim</label></td><td>${tog(f.active)}</td><td><button class="btn btn--danger btn--sm" style="padding:4px 8px;" onclick="deleteCatalogItemClick('finishes', ${f.id}, '${f.name.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`).join('') +
         '</tbody></table>';
 }
 
 function renderSweets() {
-    if (!catalogCache?.sweets?.length) return '<p class="p-4">Nenhum docinho cadastrado</p>';
-    return '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Qtd</th><th>Preço (R$)</th><th>Mín.</th><th>Ativo</th></tr></thead><tbody>' +
-        catalogCache.sweets.map(s => `<tr data-id="${s.id}"><td>${s.id}</td><td>${s.name}</td><td>${s.unit_quantity} un</td><td>${inputNum(Number(s.price).toFixed(2), 'edit-price')}</td><td>${s.min_order_qty} un</td><td>${tog(s.active)}</td></tr>`).join('') +
+    let html = `
+    <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <button class="btn btn--primary btn--sm" onclick="toggleAddForm('sweets')">➕ Novo Docinho</button>
+        <div id="form-add-sweets" style="display:none; margin-top:12px; padding:16px; border:1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg);">
+            <h3 style="font-size:0.9rem; margin-bottom:10px;">Adicionar Novo Docinho</h3>
+            <form id="form-new-sweet" onsubmit="event.preventDefault(); submitNewCatalogItem('sweets', this);" style="display:grid; gap:10px;">
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div style="flex:1; min-width:150px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Nome *</label><input type="text" name="name" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:80px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Qtd/Cento *</label><input type="number" name="unit_quantity" value="100" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:90px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Preço *</label><input type="number" step="0.01" name="price" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                    <div style="width:80px;"><label style="font-size:0.75rem; color:var(--text-secondary);">Mínimo *</label><input type="number" name="min_order_qty" value="50" required style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                </div>
+                <div><label style="font-size:0.75rem; color:var(--text-secondary);">Descrição</label><input type="text" name="description" style="width:100%; padding:6px; border:1px solid var(--border); border-radius:4px;"></div>
+                <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:5px;">
+                    <button type="button" class="btn btn--outline btn--sm" onclick="toggleAddForm('sweets')">Cancelar</button>
+                    <button type="submit" class="btn btn--primary btn--sm">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    `;
+
+    if (!catalogCache?.sweets?.length) {
+        return html + '<p class="p-4">Nenhum docinho cadastrado</p>';
+    }
+
+    return html + '<table class="catalog-table"><thead><tr><th>#</th><th>Nome</th><th>Qtd</th><th>Preço (R$)</th><th>Mín.</th><th>Ativo</th><th>Ações</th></tr></thead><tbody>' +
+        catalogCache.sweets.map(s => `<tr data-id="${s.id}"><td>${s.id}</td><td>${s.name}</td><td>${s.unit_quantity} un</td><td>${inputNum(Number(s.price).toFixed(2), 'edit-price')}</td><td>${s.min_order_qty} un</td><td>${tog(s.active)}</td><td><button class="btn btn--danger btn--sm" style="padding:4px 8px;" onclick="deleteCatalogItemClick('sweets', ${s.id}, '${s.name.replace(/'/g, "\\'")}')">🗑️</button></td></tr>`).join('') +
         '</tbody></table>';
 }
 
@@ -1261,6 +1392,164 @@ async function loadSettings() {
         } catch (err) { e.target.checked = !e.target.checked; showToast('Erro', 'error'); }
     });
 }
+
+
+// ============================================================
+// READY CAKES (PRONTA ENTREGA)
+// ============================================================
+
+async function loadReadyCakes() {
+    const list = document.getElementById('ready-cakes-list');
+    if (!list) return;
+
+    list.innerHTML = '<div class="kanban-loading" style="grid-column: 1 / -1;">Carregando bolos prontos...</div>';
+
+    try {
+        const cakes = await API.getReadyCakes();
+        if (!cakes.length) {
+            list.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><span class="empty-icon">🍰</span><p>Nenhum bolo pronto cadastrado para hoje.</p></div>';
+            return;
+        }
+
+        list.innerHTML = cakes.map(c => {
+            const priceStr = c.price ? 'R$ ' + Number(c.price).toFixed(2).replace('.', ',') : 'Sob consulta';
+            const descStr = c.description ? `<p style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.4;">${c.description}</p>` : '';
+            
+            return `
+            <div class="card" style="display: flex; flex-direction: column; justify-content: space-between; border-left: 4px solid ${c.available ? 'var(--green)' : 'var(--text-muted)'}; opacity: ${c.available ? 1 : 0.7};">
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text);">${c.flavor}</h3>
+                        <span style="font-size: 0.9rem; font-weight: 700; color: var(--green);">${priceStr}</span>
+                    </div>
+                    ${descStr}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); margin-top: 12px;">
+                    <span style="font-size: 0.8rem; font-weight: 500; color: var(--text-secondary);">Disponível?</span>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label class="toggle">
+                            <input type="checkbox" ${c.available ? 'checked' : ''} onchange="toggleReadyCakeAvailability(${c.id}, this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <button class="btn btn--danger btn--sm" style="padding: 4px 8px; margin-left: 10px;" onclick="deleteReadyCakeClick(${c.id}, '${c.flavor.replace(/'/g, "\\'")}')">🗑️</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        console.error('loadReadyCakes:', e);
+        list.innerHTML = '<div class="kanban-empty" style="grid-column: 1 / -1;">Erro ao carregar bolos prontos</div>';
+    }
+}
+
+function initReadyCakesForm() {
+    const form = document.getElementById('ready-cake-form');
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const flavor = document.getElementById('rc-flavor').value.trim();
+        const priceVal = document.getElementById('rc-price').value;
+        const description = document.getElementById('rc-description').value.trim() || null;
+        const price = priceVal ? parseFloat(priceVal) : null;
+
+        try {
+            await API.createReadyCake({ flavor, price, description });
+            showToast('Bolo pronto adicionado! 🎂', 'success');
+            form.reset();
+            loadReadyCakes();
+        } catch (err) {
+            showToast('Erro ao criar bolo pronto: ' + err.message, 'error');
+        }
+    });
+}
+
+window.toggleReadyCakeAvailability = async function(id, available) {
+    try {
+        await API.updateReadyCake(id, { available });
+        showToast(available ? 'Bolo marcado como disponível' : 'Bolo marcado como reservado/indisponível', 'success');
+        loadReadyCakes();
+    } catch (e) {
+        showToast('Erro ao atualizar disponibilidade: ' + e.message, 'error');
+        loadReadyCakes();
+    }
+};
+
+window.deleteReadyCakeClick = async function(id, flavor) {
+    if (!confirm(`Tem certeza que deseja excluir o bolo pronto "${flavor}"?`)) return;
+    try {
+        await API.deleteReadyCake(id);
+        showToast('Bolo pronto removido! 🗑️', 'success');
+        loadReadyCakes();
+    } catch (e) {
+        showToast('Erro ao remover bolo pronto: ' + e.message, 'error');
+    }
+};
+
+// Global Helpers for Catalog CRUD
+window.toggleAddForm = function(type) {
+    const el = document.getElementById('form-add-' + type);
+    if (el) {
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+};
+
+window.submitNewCatalogItem = async function(type, form) {
+    const formData = new FormData(form);
+    const data = {};
+    formData.forEach((value, key) => {
+        if (value === 'on') data[key] = true;
+        else {
+            if (['weight_kg', 'servings', 'price_white', 'price_chocolate', 'price_per_layer', 'price', 'unit_quantity', 'min_order_qty'].includes(key)) {
+                data[key] = value.includes('.') || value.includes(',') ? parseFloat(value.replace(',', '.')) : parseInt(value);
+            } else {
+                data[key] = value;
+            }
+        }
+    });
+
+    if (form.elements['requires_approval'] && !data['requires_approval']) data['requires_approval'] = false;
+    if (form.elements['has_extra_cost'] && !data['has_extra_cost']) data['has_extra_cost'] = false;
+
+    const apiTypeMap = {
+        tamanhos: 'sizes', recheios: 'fillings', adicionais: 'extras', finalizacoes: 'finishes', docinhos: 'sweets',
+        sizes: 'sizes', fillings: 'fillings', extras: 'extras', finishes: 'finishes', sweets: 'sweets'
+    };
+
+    try {
+        await API.createCatalogItem(apiTypeMap[type], data);
+        showToast('Item adicionado com sucesso! ✅', 'success');
+        form.reset();
+        window.toggleAddForm(type);
+        catalogCache = null;
+        const currentActiveTab = document.querySelector('.catalog-tab.active')?.dataset.catalog;
+        if (currentActiveTab) loadCatalogTab(currentActiveTab);
+        loadCatalogForForm();
+    } catch (e) {
+        showToast('Erro ao criar item: ' + e.message, 'error');
+    }
+};
+
+window.deleteCatalogItemClick = async function(type, id, label) {
+    if (!confirm(`Tem certeza que deseja excluir "${label}"?`)) return;
+
+    const apiTypeMap = {
+        tamanhos: 'sizes', recheios: 'fillings', adicionais: 'extras', finalizacoes: 'finishes', docinhos: 'sweets',
+        sizes: 'sizes', fillings: 'fillings', extras: 'extras', finishes: 'finishes', sweets: 'sweets'
+    };
+
+    try {
+        await API.deleteCatalogItem(apiTypeMap[type], id);
+        showToast('Item removido com sucesso! 🗑️', 'success');
+        catalogCache = null;
+        const currentActiveTab = document.querySelector('.catalog-tab.active')?.dataset.catalog;
+        if (currentActiveTab) loadCatalogTab(currentActiveTab);
+        loadCatalogForForm();
+    } catch (e) {
+        showToast('Erro ao remover item: ' + e.message, 'error');
+    }
+};
+
 
 // ============================================================
 // TOAST

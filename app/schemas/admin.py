@@ -147,3 +147,31 @@ class SettingsResponse(BaseModel):
 
 class SettingsUpdate(BaseModel):
     settings: dict = Field(..., description="Dict de configurações a salvar")
+
+
+# ============================================================
+# READY CAKES
+# ============================================================
+
+class ReadyCakeCreate(BaseModel):
+    flavor: str = Field(..., min_length=1)
+    description: Optional[str] = None
+    price: Optional[float] = None
+
+
+class ReadyCakeUpdate(BaseModel):
+    flavor: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    available: Optional[bool] = None
+
+
+class ReadyCakeItem(BaseModel):
+    id: int
+    flavor: str
+    description: Optional[str] = None
+    price: Optional[float] = None
+    available: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+

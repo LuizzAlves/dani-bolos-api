@@ -47,6 +47,13 @@ MENU_ALIASES = {
     "meu pedido": SmTriggerEnum.OPTION_3,
     "status do pedido": SmTriggerEnum.OPTION_3,
     "acompanhar pedido": SmTriggerEnum.OPTION_3,
+    "bolo pronto": SmTriggerEnum.OPTION_5,
+    "bolos prontos": SmTriggerEnum.OPTION_5,
+    "pronta entrega": SmTriggerEnum.OPTION_5,
+    "bolos do dia": SmTriggerEnum.OPTION_5,
+    "tem bolo pronto": SmTriggerEnum.OPTION_5,
+    "bolo do dia": SmTriggerEnum.OPTION_5,
+    "prontos": SmTriggerEnum.OPTION_5,
 }
 
 # Confirmação / Cancelamento
@@ -122,6 +129,7 @@ def classify_input(
         ConversationState.DEFININDO_OBSERVACOES: _classify_observacoes,
         ConversationState.CONFIRMANDO_PEDIDO: _classify_confirmacao,
         ConversationState.CONSULTA_PEDIDO: _classify_consulta_pedido,
+        ConversationState.PRONTA_ENTREGA: _classify_pronta_entrega,
         ConversationState.ATENDIMENTO_HUMANO: _classify_atendimento_humano,
     }
 
@@ -161,6 +169,33 @@ def _classify_menu(text, normalized, catalog_items, order_context):
     for alias, trigger in MENU_ALIASES.items():
         if normalized == alias or normalized.startswith(alias):
             return ClassificationResult(trigger=trigger)
+
+    return ClassificationResult(trigger=SmTriggerEnum.INPUT_INVALID)
+
+
+def _classify_pronta_entrega(text, normalized, catalog_items, order_context):
+    """Seleção de bolo pronto: número do item ou voltar."""
+    if normalized in MENU_RETURN_ALIASES or normalized in GLOBAL_CANCEL_ALIASES:
+        return ClassificationResult(trigger=SmTriggerEnum.INPUT_VALID, matched_value="RETURN_MENU")
+
+    cakes = catalog_items or []
+    idx = _parse_int(normalized)
+    if idx is not None and 1 <= idx <= len(cakes):
+        cake = cakes[idx - 1]
+        return ClassificationResult(
+            trigger=SmTriggerEnum.INPUT_VALID,
+            matched_id=cake.id,
+        )
+
+    # Match por nome parcial do sabor
+    for cake in cakes:
+        from app.core.payload_parser import normalize_text
+        flavor_norm = normalize_text(cake.flavor)
+        if normalized in flavor_norm or flavor_norm in normalized:
+            return ClassificationResult(
+                trigger=SmTriggerEnum.INPUT_VALID,
+                matched_id=cake.id,
+            )
 
     return ClassificationResult(trigger=SmTriggerEnum.INPUT_INVALID)
 
@@ -437,6 +472,7 @@ def _match_option_number(normalized: str) -> SmTriggerEnum | None:
         "2": SmTriggerEnum.OPTION_2,
         "3": SmTriggerEnum.OPTION_3,
         "4": SmTriggerEnum.OPTION_4,
+        "5": SmTriggerEnum.OPTION_5,
     }
     return mapping.get(normalized.strip())
 

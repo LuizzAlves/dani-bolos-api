@@ -23,13 +23,15 @@ from app.repositories import (
     clients as clients_repo,
     alerts as alerts_repo,
     settings as settings_repo,
+    ready_cakes as rc_repo,
 )
 from app.core.service_hours import is_time_allowed_for_date
 from app.schemas.admin import (
     DashboardStats, OrderListItem, OrderDetail, OrderStatusUpdate,
     ManualOrderCreate, CalendarDay, CalendarResponse, AvailabilityUpdate,
     AlertItem, AlertsResponse, CatalogResponse, CatalogItemUpdate,
-    SettingsResponse, SettingsUpdate,
+    SettingsResponse, SettingsUpdate, ReadyCakeCreate, ReadyCakeUpdate,
+    ReadyCakeItem,
 )
 from app.logging_config import get_logger
 
@@ -633,3 +635,118 @@ async def update_settings(
     await db.commit()
     logger.info("settings_updated", keys=list(body.settings.keys()))
     return {"status": "ok"}
+
+
+# ============================================================
+# READY CAKES
+# ============================================================
+
+@router.get("/ready-cakes", response_model=list[ReadyCakeItem])
+async def list_ready_cakes(
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Retorna todos os bolos prontos para o painel admin."""
+    cakes = await rc_repo.get_all_ready_cakes(db)
+    return [
+        ReadyCakeItem(
+            id=c.id,
+            flavor=c.flavor,
+            description=c.description,
+            price=float(c.price) if c.price is not None else None,
+            available=c.available,
+            created_at=c.created_at.isoformat() if c.created_at else None,
+            updated_at=c.updated_at.isoformat() if c.updated_at else None,
+        )
+        for c in cakes
+    ]
+
+
+@router.post("/ready-cakes", response_model=ReadyCakeItem)
+async def create_ready_cake(
+    body: ReadyCakeCreate,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Cria um novo bolo pronto."""
+    cake = await rc_repo.create_ready_cake(
+        db, flavor=body.flavor, description=body.description, price=body.price
+    )
+    await db.commit()
+    return ReadyCakeItem(
+        id=cake.id,
+        flavor=cake.flavor,
+        description=cake.description,
+        price=float(cake.price) if cake.price is not None else None,
+        available=cake.available,
+        created_at=cake.created_at.isoformat() if cake.created_at else None,
+        updated_at=cake.updated_at.isoformat() if cake.updated_at else None,
+    )
+
+
+@router.patch("/ready-cakes/{cake_id}")
+async def update_ready_cake(
+    cake_id: int,
+    body: ReadyCakeUpdate,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Atualiza um bolo pronto."""
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(400, "Nenhum campo fornecido para atualização")
+    
+    ok = await rc_repo.update_ready_cake(db, cake_id, data)
+    if not ok:
+        raise HTTPException(404, "Bolo pronto não encontrado")
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.delete("/ready-cakes/{cake_id}")
+async def delete_ready_cake(
+    cake_id: int,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Remove um bolo pronto."""
+    ok = await rc_repo.delete_ready_cake(db, cake_id)
+    if not ok:
+        raise HTTPException(404, "Bolo pronto não encontrado")
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ============================================================
+# CATALOG MANAGEMENT
+# ============================================================
+
+@router.post("/catalog/{catalog_type}")
+async def create_catalog_item(
+    catalog_type: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Adiciona um novo item ao catálogo (recheios, tamanhos, extras, etc)."""
+    item = await catalog_repo.create_catalog_item(db, catalog_type, body)
+    if not item:
+        raise HTTPException(400, f"Tipo de catálogo ou dados inválidos: {catalog_type}")
+    await db.commit()
+    return {"status": "ok", "id": item.id}
+
+
+@router.delete("/catalog/{catalog_type}/{item_id}")
+async def delete_catalog_item(
+    catalog_type: str,
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Remove um item do catálogo."""
+    ok = await catalog_repo.delete_catalog_item(db, catalog_type, item_id)
+    if not ok:
+        raise HTTPException(404, f"Item não encontrado no catálogo '{catalog_type}'")
+    await db.commit()
+    return {"status": "ok"}
+

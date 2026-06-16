@@ -42,6 +42,9 @@ BUILTIN_TRANSITIONS: dict[
     (ConversationState.MENU_PRINCIPAL, SmTriggerEnum.OPTION_4): (
         ConversationState.ATENDIMENTO_HUMANO, SmActionEnum.ASK_HUMAN_REASON, FallbackEffectEnum.RESET,
     ),
+    (ConversationState.MENU_PRINCIPAL, SmTriggerEnum.OPTION_5): (
+        ConversationState.PRONTA_ENTREGA, SmActionEnum.SHOW_READY_CAKES, FallbackEffectEnum.RESET,
+    ),
     (ConversationState.MENU_PRINCIPAL, SmTriggerEnum.INPUT_INVALID): (
         ConversationState.MENU_PRINCIPAL, SmActionEnum.INCREMENT_FALLBACK, FallbackEffectEnum.INCREMENT,
     ),
@@ -143,6 +146,12 @@ BUILTIN_TRANSITIONS: dict[
     ),
     (ConversationState.ATENDIMENTO_HUMANO, SmTriggerEnum.INPUT_VALID): (
         ConversationState.BOT_PAUSADO, SmActionEnum.PAUSE_BOT_AND_NOTIFY_HUMAN, FallbackEffectEnum.PAUSE,
+    ),
+    (ConversationState.PRONTA_ENTREGA, SmTriggerEnum.INPUT_VALID): (
+        ConversationState.BOT_PAUSADO, SmActionEnum.RESERVE_READY_CAKE_INTEREST, FallbackEffectEnum.PAUSE,
+    ),
+    (ConversationState.PRONTA_ENTREGA, SmTriggerEnum.INPUT_INVALID): (
+        ConversationState.PRONTA_ENTREGA, SmActionEnum.INCREMENT_FALLBACK, FallbackEffectEnum.INCREMENT,
     ),
     (ConversationState.BOT_PAUSADO, SmTriggerEnum.LOCK_EXPIRED): (
         ConversationState.MENU_PRINCIPAL, SmActionEnum.RESUME_BOT, FallbackEffectEnum.RESET,
