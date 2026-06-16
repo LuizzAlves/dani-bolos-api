@@ -2,6 +2,8 @@
 Response Builder: constrói mensagens de resposta para cada action_code.
 """
 
+from uuid import UUID
+from datetime import datetime
 from decimal import Decimal
 
 from app.models import SmActionEnum, ConversationState
