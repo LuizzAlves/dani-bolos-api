@@ -557,7 +557,13 @@ def _build_show_ready_cakes(ctx, name):
     text = "🎂 *Bolos Prontos do Dia*\n\n"
     text += "Confira os bolos disponíveis para retirada:\n\n"
     for i, c in enumerate(cakes, 1):
-        price_str = f" — R$ {c.price:.2f}".replace('.', ',') if c.price else " — consulte o valor"
+        if c.price is not None:
+            try:
+                price_str = f" — R$ {Decimal(str(c.price)):.2f}".replace('.', ',')
+            except Exception:
+                price_str = f" — R$ {c.price}"
+        else:
+            price_str = " — consulte o valor"
         desc_str = f"\n   _{c.description}_" if c.description else ""
         text += f"*{i}.* {c.flavor}{price_str}{desc_str}\n"
     text += (
