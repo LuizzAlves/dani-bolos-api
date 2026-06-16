@@ -58,10 +58,21 @@ async def get_db():
 async def init_db():
     """Verifica a conexão com o banco na inicialização."""
     engine = get_engine()
+    text = __import__("sqlalchemy").text
     async with engine.connect() as conn:
-        await conn.execute(
-            __import__("sqlalchemy").text("SELECT 1")
-        )
+        try:
+            # Evita erro de transaction block
+            await conn.execute(text("COMMIT"))
+            await conn.execute(
+                text("ALTER TYPE active_flow_type ADD VALUE IF NOT EXISTS 'PRONTA_ENTREGA'")
+            )
+            await conn.execute(
+                text("ALTER TYPE conversation_state ADD VALUE IF NOT EXISTS 'PRONTA_ENTREGA'")
+            )
+        except Exception:
+            pass
+
+        await conn.execute(text("SELECT 1"))
 
 
 async def close_db():
