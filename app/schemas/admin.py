@@ -46,6 +46,11 @@ class OrderListItem(BaseModel):
 
 
 class OrderDetail(OrderListItem):
+    size_id: int | None = None
+    filling_1_id: int | None = None
+    filling_2_id: int | None = None
+    finish_id: int | None = None
+    extras_raw: list[dict] = []
     shape: str | None = None
     filling_count: int | None = None
     base_value: float | None = None
@@ -71,6 +76,23 @@ class ManualOrderCreate(BaseModel):
     notes: str | None = None
     total_value: float | None = None
     filling_count: int | None = 2
+
+
+class ManualOrderUpdate(BaseModel):
+    client_name: str | None = Field(None, min_length=1)
+    client_phone: str | None = Field(None, min_length=10)
+    size_id: int | None = None
+    shape: str | None = None
+    dough: str | None = None
+    filling_1_id: int | None = None
+    filling_2_id: int | None = None
+    finish_id: int | None = None
+    extras: list[dict] | None = None  # [{extra_id, layers}]
+    pickup_date: str | None = None
+    pickup_time: str | None = None
+    notes: str | None = None
+    total_value: float | None = None
+    filling_count: int | None = None
 
 
 # ============================================================

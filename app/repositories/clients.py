@@ -43,6 +43,14 @@ async def get_or_create_client(
     return client, True
 
 
+async def get_client_by_id(db: AsyncSession, client_id: UUID) -> Client | None:
+    """Busca cliente pelo ID."""
+    result = await db.execute(
+        select(Client).where(Client.id == client_id)
+    )
+    return result.scalar_one_or_none()
+
+
 async def update_client_name(db: AsyncSession, client_id: UUID, name: str) -> None:
     """Atualiza o nome do cliente."""
     result = await db.execute(

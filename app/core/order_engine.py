@@ -671,7 +671,7 @@ async def _handle_save_notes(db, ctx, conversation_id, client_id, classification
     )
 
     # Calcular total e preparar resumo
-    order = await order_repo.get_active_order(db, conversation_id)
+    order = await order_repo.get_order_with_details(db, order_id)
     if order:
         order.notes = full_notes
         base = order.base_value or Decimal("0")

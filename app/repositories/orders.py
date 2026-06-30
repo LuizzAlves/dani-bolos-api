@@ -447,6 +447,48 @@ async def create_manual_order(
     return order
 
 
+async def update_manual_order(
+    db: AsyncSession,
+    order_id: UUID,
+    client_id: UUID | None = None,
+    size_id: int | None = None,
+    shape: CakeShape | None = None,
+    dough: DoughType | None = None,
+    filling_1_id: int | None = None,
+    filling_2_id: int | None = None,
+    finish_id: int | None = None,
+    pickup_date: date | None = None,
+    pickup_time=None,
+    notes: str | None = None,
+    base_value: Decimal | None = None,
+    extras_value: Decimal | None = None,
+    total_value: Decimal | None = None,
+    filling_count: int | None = None,
+) -> Order | None:
+    """Atualiza pedido manual (Admin)."""
+    values = {}
+    if client_id is not None: values["client_id"] = client_id
+    if size_id is not None: values["size_id"] = size_id
+    if shape is not None: values["shape"] = shape
+    if dough is not None: values["dough"] = dough
+    if filling_1_id is not None: values["filling_1_id"] = filling_1_id
+    if filling_2_id is not None: values["filling_2_id"] = filling_2_id
+    if finish_id is not None: values["finish_id"] = finish_id
+    if pickup_date is not None: values["pickup_date"] = pickup_date
+    if pickup_time is not None: values["pickup_time"] = pickup_time
+    if notes is not None: values["notes"] = notes
+    if base_value is not None: values["base_value"] = base_value
+    if extras_value is not None: values["extras_value"] = extras_value
+    if total_value is not None: values["total_value"] = total_value
+    if filling_count is not None: values["filling_count"] = filling_count
+
+    if values:
+        await db.execute(update(Order).where(Order.id == order_id).values(**values))
+        await db.flush()
+
+    return await get_order_by_id(db, order_id)
+
+
 async def get_dashboard_stats(db: AsyncSession) -> dict:
     """Métricas rápidas para o dashboard."""
     today = date.today()

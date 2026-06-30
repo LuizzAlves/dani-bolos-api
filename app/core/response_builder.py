@@ -390,19 +390,39 @@ def _build_show_summary(ctx, name):
     total = ctx.order_data.get("total_value", Decimal("0"))
 
     if order:
+        total_str = f"R$ {total:.2f}".replace('.', ',')
         text = (
             "📋 *Resumo do Pedido:*\n\n"
             f"🔢 Pedido #{order.order_number}\n"
         )
-        # Os detalhes completos seriam preenchidos com dados do pedido
-        # Aqui usamos os campos disponíveis
+        # Detalhes do bolo
+        if order.size:
+            text += f"🎂 Tamanho: {order.size.description}\n"
+        if order.shape:
+            text += f"📐 Forma: {order.shape.value.capitalize()}\n"
+        if order.dough:
+            text += f"🍫 Massa: {order.dough.value.capitalize()}\n"
+        if order.filling_1:
+            text += f"🥄 1º Recheio: {order.filling_1.name}\n"
+        if order.filling_2:
+            text += f"🥄 2º Recheio: {order.filling_2.name}\n"
+        if order.order_extras:
+            extras_list = []
+            for oe in order.order_extras:
+                if oe.extra:
+                    layer_txt = f" ({oe.layers} cam.)" if oe.layers > 1 else ""
+                    extras_list.append(f"{oe.extra.name}{layer_txt}")
+            if extras_list:
+                text += f"➕ Adicionais: {', '.join(extras_list)}\n"
+        if order.finish:
+            text += f"✨ Finalização: {order.finish.name}\n"
         if order.pickup_date:
             text += f"📅 Data: {order.pickup_date.strftime('%d/%m/%Y')}\n"
         if order.pickup_time:
             text += f"⏰ Horário: {order.pickup_time.strftime('%H:%M')}\n"
         if order.notes:
             text += f"📝 Observações: {order.notes}\n"
-        text += f"\n💰 *Valor total: R$ {total:.2f}*\n"
+        text += f"\n💰 *Valor total: {total_str}*\n"
     else:
         text = "📋 Resumo do pedido gerado.\n"
 

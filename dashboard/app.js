@@ -44,6 +44,7 @@ const API = {
     getOrders(q) { return this.get('/orders' + (q ? '?' + q : '')); },
     getOrder(id) { return this.get('/orders/' + id); },
     createOrder(d) { return this.post('/orders', d); },
+    updateOrder(id, d) { return this.patch('/orders/' + id, d); },
     updateStatus(id, s) { return this.patch('/orders/' + id + '/status', { new_status: s }); },
     getCalendar(y, m) { return this.get('/calendar?year=' + y + '&month=' + m); },
     updateDay(d, data) { return this.patch('/calendar/' + d, data); },
@@ -174,11 +175,17 @@ function loadAll() {
 // TABS
 // ============================================================
 function initTabs() {
-    document.querySelectorAll('.nav-item').forEach(btn => {
+    const allBtns = document.querySelectorAll('.nav-item, .bnav-item');
+    allBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
-            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            allBtns.forEach(b => {
+                if (b.dataset.tab === tab) {
+                    b.classList.add('active');
+                } else {
+                    b.classList.remove('active');
+                }
+            });
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
             const panel = document.getElementById('tab-' + tab);
             if (panel) { void panel.offsetWidth; panel.classList.add('active'); }
@@ -763,7 +770,15 @@ function initDrawer() {
 async function openOrderDrawer(orderId) {
     try {
         const o = await API.getOrder(orderId);
+        currentOrderData = o;
+        
         document.getElementById('drawer-title').textContent = 'Pedido #' + (o.order_number || '—');
+
+        const btnEdit = document.getElementById('btn-edit-order');
+        if (btnEdit) {
+            btnEdit.style.display = (o.status !== 'FINALIZADO' && o.status !== 'CANCELADO') ? 'block' : 'none';
+            btnEdit.onclick = () => renderEditOrderForm(o);
+        }
 
         const phoneClean = (o.client_phone || '').replace(/\D/g, '');
         const waLink = phoneClean ? `<a href="https://wa.me/${phoneClean}" target="_blank" class="btn btn--whatsapp btn--sm">📱 WhatsApp</a>` : '';
@@ -813,6 +828,120 @@ async function openOrderDrawer(orderId) {
 }
 
 function closeDrawer() { document.getElementById('drawer-overlay').classList.remove('visible'); }
+
+async function renderEditOrderForm(o) {
+    if (!catalogCache) {
+        try { catalogCache = await API.getCatalog(); } 
+        catch { showToast('Erro ao carregar catálogo', 'error'); return; }
+    }
+
+    const szOpts = (catalogCache.sizes||[]).map(s => `<option value="${s.id}" ${s.id===o.size_id?'selected':''}>${s.description} (${s.shape})</option>`).join('');
+    const dOpts = `<option value="BRANCA" ${o.dough==='BRANCA'?'selected':''}>Branca</option><option value="CHOCOLATE" ${o.dough==='CHOCOLATE'?'selected':''}>Chocolate</option>`;
+    const fOpts = (catalogCache.fillings||[]).map(f => `<option value="${f.id}">${f.name}</option>`);
+    const f1Opts = fOpts.map(x => x.replace(`value="${o.filling_1_id}"`, `value="${o.filling_1_id}" selected`)).join('');
+    const f2Opts = fOpts.map(x => x.replace(`value="${o.filling_2_id}"`, `value="${o.filling_2_id}" selected`)).join('');
+    const finOpts = (catalogCache.finishes||[]).map(f => `<option value="${f.id}" ${f.id===o.finish_id?'selected':''}>${f.name}</option>`).join('');
+    
+    const extraIds = (o.extras_raw || []).map(e => e.extra_id);
+    const extOpts = (catalogCache.extras||[]).map(e => `<option value="${e.id}" ${extraIds.includes(e.id)?'selected':''}>${e.name}</option>`).join('');
+    const timeOpts = (catalogCache.time_slots||[]).map(t => `<option value="${t.time}" ${(o.pickup_time||'').startsWith(t.time)?'selected':''}>${t.time}</option>`).join('');
+
+    const html = `
+        <form id="edit-order-form" class="new-order-form" autocomplete="off" style="padding:10px;">
+            <div class="form-section">
+                <h3>Cliente</h3>
+                <div class="form-row">
+                    <div class="form-field"><label>Nome *</label><input type="text" id="eo-client-name" value="${o.client_name||''}" required></div>
+                    <div class="form-field"><label>Telefone *</label><input type="tel" id="eo-client-phone" value="${o.client_phone||''}" required></div>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Bolo</h3>
+                <div class="form-row">
+                    <div class="form-field"><label>Tamanho *</label><select id="eo-size" required><option value="">Selecione...</option>${szOpts}</select></div>
+                    <div class="form-field"><label>Massa *</label><select id="eo-dough" required><option value="">Selecione...</option>${dOpts}</select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field"><label>Recheio 1 *</label><select id="eo-filling1" required><option value="">Selecione...</option>${f1Opts}</select></div>
+                    <div class="form-field"><label>Recheio 2</label><select id="eo-filling2"><option value="">Selecione...</option>${f2Opts}</select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-field"><label>Finalização</label><select id="eo-finish"><option value="">Selecione...</option>${finOpts}</select></div>
+                    <div class="form-field"><label>Adicionais</label><select id="eo-extras" multiple>${extOpts}</select></div>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Retirada</h3>
+                <div class="form-row">
+                    <div class="form-field"><label>Data *</label><input type="date" id="eo-date" value="${o.pickup_date||''}" required></div>
+                    <div class="form-field"><label>Horário *</label><select id="eo-time" required><option value="">Selecione...</option>${timeOpts}</select></div>
+                </div>
+            </div>
+            <div class="form-section">
+                <h3>Detalhes</h3>
+                <div class="form-row">
+                    <div class="form-field"><label>Valor total (R$)</label><input type="number" id="eo-value" step="0.01" min="0" value="${o.total_value||''}"></div>
+                    <div class="form-field"><label>Observações</label><textarea id="eo-notes" rows="2">${o.notes||''}</textarea></div>
+                </div>
+            </div>
+        </form>
+    `;
+
+    document.getElementById('drawer-body').innerHTML = html;
+    
+    const footer = document.getElementById('drawer-footer');
+    footer.innerHTML = `
+        <button class="btn btn--outline btn--sm" id="btn-eo-cancel">Cancelar</button>
+        <button class="btn btn--primary btn--sm" id="btn-eo-save">Salvar Alterações</button>
+    `;
+
+    document.getElementById('btn-edit-order').style.display = 'none';
+
+    document.getElementById('btn-eo-cancel').onclick = () => openOrderDrawer(o.id);
+    document.getElementById('btn-eo-save').onclick = async () => {
+        const form = document.getElementById('edit-order-form');
+        if (!form.checkValidity()) { form.reportValidity(); return; }
+
+        const btn = document.getElementById('btn-eo-save');
+        btn.disabled = true; btn.textContent = 'Salvando...';
+
+        try {
+            const extSel = Array.from(document.getElementById('eo-extras').selectedOptions).map(opt => ({
+                extra_id: parseInt(opt.value), layers: 1
+            }));
+            
+            const sizeId = parseInt(document.getElementById('eo-size').value);
+            const sizeObj = catalogCache.sizes.find(s => s.id === sizeId);
+
+            const payload = {
+                client_name: document.getElementById('eo-client-name').value,
+                client_phone: document.getElementById('eo-client-phone').value,
+                size_id: sizeId,
+                shape: sizeObj ? sizeObj.shape : null,
+                dough: document.getElementById('eo-dough').value,
+                filling_1_id: parseInt(document.getElementById('eo-filling1').value),
+                filling_2_id: document.getElementById('eo-filling2').value ? parseInt(document.getElementById('eo-filling2').value) : null,
+                finish_id: document.getElementById('eo-finish').value ? parseInt(document.getElementById('eo-finish').value) : null,
+                extras: extSel,
+                pickup_date: document.getElementById('eo-date').value,
+                pickup_time: document.getElementById('eo-time').value,
+                notes: document.getElementById('eo-notes').value || null,
+                total_value: document.getElementById('eo-value').value ? parseFloat(document.getElementById('eo-value').value) : null
+            };
+
+            await API.updateOrder(o.id, payload);
+            showToast('Pedido atualizado com sucesso!', 'success');
+            
+            openOrderDrawer(o.id);
+            loadKanban();
+            loadDashboard();
+            loadCalendar();
+        } catch (e) {
+            showToast('Erro ao salvar: ' + e.message, 'error');
+            btn.disabled = false; btn.textContent = 'Salvar Alterações';
+        }
+    };
+}
 
 // ============================================================
 // NEW ORDER FORM

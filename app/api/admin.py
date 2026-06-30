@@ -28,7 +28,7 @@ from app.repositories import (
 from app.core.service_hours import is_time_allowed_for_date
 from app.schemas.admin import (
     DashboardStats, OrderListItem, OrderDetail, OrderStatusUpdate,
-    ManualOrderCreate, CalendarDay, CalendarResponse, AvailabilityUpdate,
+    ManualOrderCreate, ManualOrderUpdate, CalendarDay, CalendarResponse, AvailabilityUpdate,
     AlertItem, AlertsResponse, CatalogResponse, CatalogItemUpdate,
     SettingsResponse, SettingsUpdate, ReadyCakeCreate, ReadyCakeUpdate,
     ReadyCakeItem,
@@ -83,7 +83,18 @@ def _serialize_order_list(order: Order) -> dict:
 def _serialize_order_detail(order: Order) -> dict:
     """Serializa um pedido com detalhes completos (modal)."""
     base = _serialize_order_list(order)
+    
+    extras_raw = []
+    if order.order_extras:
+        for oe in order.order_extras:
+            extras_raw.append({"extra_id": oe.extra_id, "layers": oe.layers})
+
     base.update({
+        "size_id": order.size_id,
+        "filling_1_id": order.filling_1_id,
+        "filling_2_id": order.filling_2_id,
+        "finish_id": order.finish_id,
+        "extras_raw": extras_raw,
         "shape": order.shape.value if order.shape else None,
         "filling_count": order.filling_count,
         "base_value": float(order.base_value) if order.base_value else None,
@@ -364,6 +375,111 @@ async def create_order(
         "order_id": str(order.id),
         "order_number": order.order_number,
     }
+
+
+@router.patch("/orders/{order_id}")
+async def update_manual_order(
+    order_id: UUID,
+    body: ManualOrderUpdate,
+    db: AsyncSession = Depends(get_db),
+    _auth: bool = Depends(_verify_admin_token),
+):
+    """Edita um pedido existente pelo painel."""
+    existing = await orders_repo.get_order_by_id(db, order_id)
+    if not existing:
+        raise HTTPException(404, "Pedido não encontrado")
+
+    pickup_date = existing.pickup_date
+    if body.pickup_date:
+        try:
+            pickup_date = date.fromisoformat(body.pickup_date)
+        except ValueError:
+            raise HTTPException(400, "Data inválida")
+
+    pickup_time = existing.pickup_time
+    if body.pickup_time:
+        parts = body.pickup_time.split(":")
+        if len(parts) != 2:
+            raise HTTPException(400, "Horário inválido")
+        try:
+            pickup_time = time(int(parts[0]), int(parts[1]))
+        except ValueError:
+            raise HTTPException(400, "Horário inválido")
+
+    # Verifica capacidade se a data mudou
+    if pickup_date and existing.pickup_date and pickup_date != existing.pickup_date:
+        avail = await avail_repo.check_date_available(db, pickup_date)
+        if not avail["available"]:
+            raise HTTPException(400, f"Nova data não disponível: {avail.get('block_reason', 'Limite atingido')}")
+
+        success = await avail_repo.increment_confirmed_orders(db, pickup_date)
+        if not success:
+            raise HTTPException(400, "Infelizmente a agenda acabou de lotar para a nova data.")
+        
+        await avail_repo.decrement_confirmed_orders(db, existing.pickup_date)
+    
+    # Validar expediente se data ou hora mudaram
+    if body.pickup_date or body.pickup_time:
+        if pickup_date and pickup_time:
+            allowed_time, time_reason = await is_time_allowed_for_date(db, pickup_date, pickup_time)
+            if not allowed_time:
+                # Reverter incremento se fizemos
+                if pickup_date != existing.pickup_date:
+                    await avail_repo.decrement_confirmed_orders(db, pickup_date)
+                    await avail_repo.increment_confirmed_orders(db, existing.pickup_date)
+                raise HTTPException(400, time_reason or "Horário fora do funcionamento para esta data.")
+
+    client_id = existing.client_id
+    if body.client_name is not None or body.client_phone is not None:
+        c_phone = body.client_phone if body.client_phone is not None else ""
+        c_name = body.client_name if body.client_name is not None else ""
+        if not c_phone and existing.client_id:
+            # Precisamos do cliente real para não apagar o telefone
+            client = await clients_repo.get_client_by_id(db, existing.client_id)
+            if client:
+                c_phone = client.phone
+                if not c_name: c_name = client.name
+        
+        if c_phone:
+            client, _ = await clients_repo.get_or_create_client(db, c_phone, c_name)
+            client_id = client.id
+
+    shape = CakeShape(body.shape) if body.shape else None
+    dough = DoughType(body.dough) if body.dough else None
+
+    from decimal import Decimal
+    total_val = Decimal(str(body.total_value)) if body.total_value is not None else existing.total_value
+
+    await orders_repo.update_manual_order(
+        db=db,
+        order_id=order_id,
+        client_id=client_id,
+        size_id=body.size_id if body.size_id is not None else existing.size_id,
+        shape=shape if body.shape is not None else existing.shape,
+        dough=dough if body.dough is not None else existing.dough,
+        filling_1_id=body.filling_1_id if body.filling_1_id is not None else existing.filling_1_id,
+        filling_2_id=body.filling_2_id if body.filling_2_id is not None else existing.filling_2_id,
+        finish_id=body.finish_id if body.finish_id is not None else existing.finish_id,
+        pickup_date=pickup_date,
+        pickup_time=pickup_time,
+        notes=body.notes if body.notes is not None else existing.notes,
+        total_value=total_val,
+        filling_count=body.filling_count if body.filling_count is not None else existing.filling_count,
+    )
+
+    if body.extras is not None:
+        await orders_repo.clear_order_extras(db, order_id)
+        for ext in body.extras:
+            extra = await catalog_repo.get_extra_by_id(db, ext.get("extra_id"))
+            if extra:
+                await orders_repo.add_order_extra(
+                    db, order_id, extra.id,
+                    ext.get("layers", 1), extra.price_per_layer
+                )
+
+    await db.commit()
+    logger.info("manual_order_updated", order_id=str(order_id))
+    return {"status": "ok", "order_id": str(order_id)}
 
 
 @router.patch("/orders/{order_id}/status")

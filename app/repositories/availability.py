@@ -89,6 +89,23 @@ async def increment_confirmed_orders(db: AsyncSession, target_date: date) -> boo
     return result.rowcount > 0
 
 
+async def decrement_confirmed_orders(db: AsyncSession, target_date: date) -> bool:
+    """
+    Decrementa confirmed_orders atomicamente.
+    Retorna True se decrementou.
+    """
+    result = await db.execute(
+        update(Availability)
+        .where(
+            Availability.date == target_date,
+            Availability.confirmed_orders > 0,
+        )
+        .values(confirmed_orders=Availability.confirmed_orders - 1)
+    )
+    await db.flush()
+    return result.rowcount > 0
+
+
 # ============================================================
 # FUNÇÕES DO DASHBOARD ADMINISTRATIVO
 # ============================================================
