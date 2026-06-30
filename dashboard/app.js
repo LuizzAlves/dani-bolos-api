@@ -121,8 +121,8 @@ function initLogin() {
     const input = document.getElementById('login-token');
     const errEl = document.getElementById('login-error');
 
-    btn.addEventListener('click', async () => {
-        const token = input.value.trim();
+    btn?.addEventListener('click', async () => {
+        const token = input?.value.trim() || '';
         if (!token) { errEl.textContent = 'Informe o token'; return; }
         API.token = token;
         errEl.textContent = '';
@@ -142,7 +142,7 @@ function initLogin() {
         }
     });
 
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') btn.click(); });
+    input?.addEventListener('keydown', e => { if (e.key === 'Enter') btn?.click(); });
     document.getElementById('header-logout')?.addEventListener('click', () => API.logout());
 }
 
@@ -195,8 +195,10 @@ function initTabs() {
 }
 
 function initSidebar() {
-    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+    const toggle = document.getElementById('sidebar-toggle');
+    toggle?.addEventListener('click', () => {
         const sidebar = document.getElementById('sidebar');
+        if (!sidebar) return;
         const isOpen = sidebar.classList.toggle('open');
         document.getElementById('sidebar-backdrop')?.classList.toggle('visible', isOpen);
         document.body.classList.toggle('sidebar-visible', isOpen);
@@ -284,13 +286,13 @@ function initCalendarNav() {
         if (el) el.replaceWith(el.cloneNode(true));
     });
 
-    document.getElementById('cal-prev').addEventListener('click', () => { calM--; if(calM<0){calM=11;calY--;} loadCalendar(); });
-    document.getElementById('cal-next').addEventListener('click', () => { calM++; if(calM>11){calM=0;calY++;} loadCalendar(); });
+    document.getElementById('cal-prev')?.addEventListener('click', () => { calM--; if(calM<0){calM=11;calY--;} loadCalendar(); });
+    document.getElementById('cal-next')?.addEventListener('click', () => { calM++; if(calM>11){calM=0;calY++;} loadCalendar(); });
 
-    document.getElementById('cap-minus').addEventListener('click', () => adjustCapacity(-1));
-    document.getElementById('cap-plus').addEventListener('click', () => adjustCapacity(1));
-    document.getElementById('btn-block-day').addEventListener('click', toggleBlockDay);
-    document.getElementById('btn-save-day-message').addEventListener('click', saveDayMessage);
+    document.getElementById('cap-minus')?.addEventListener('click', () => adjustCapacity(-1));
+    document.getElementById('cap-plus')?.addEventListener('click', () => adjustCapacity(1));
+    document.getElementById('btn-block-day')?.addEventListener('click', toggleBlockDay);
+    document.getElementById('btn-save-day-message')?.addEventListener('click', saveDayMessage);
 }
 
 function renderCal() {
@@ -763,8 +765,8 @@ function renderHistory() {
 // DRAWER
 // ============================================================
 function initDrawer() {
-    document.getElementById('drawer-close').addEventListener('click', closeDrawer);
-    document.getElementById('drawer-overlay').addEventListener('click', e => { if(e.target === e.currentTarget) closeDrawer(); });
+    document.getElementById('drawer-close')?.addEventListener('click', closeDrawer);
+    document.getElementById('drawer-overlay')?.addEventListener('click', e => { if(e.target === e.currentTarget) closeDrawer(); });
 }
 
 async function openOrderDrawer(orderId) {
@@ -954,7 +956,7 @@ async function loadCatalogForForm() {
         console.error('loadCatalogForForm:', e);
     }
 
-    document.getElementById('new-order-form').addEventListener('submit', handleNewOrder);
+    document.getElementById('new-order-form')?.addEventListener('submit', handleNewOrder);
 }
 
 function populateSelects() {
@@ -1424,7 +1426,7 @@ async function renderServiceHours() {
 
     c.innerHTML = html;
 
-    document.getElementById('btn-save-service-hours').addEventListener('click', async () => {
+    document.getElementById('btn-save-service-hours')?.addEventListener('click', async () => {
         const trs = document.querySelectorAll('#service-hours-body tr');
         const newHours = {};
         trs.forEach(tr => {
@@ -1474,7 +1476,7 @@ async function renderGeneralSettings() {
         </div>
     </div>`;
 
-    document.getElementById('btn-save-general').addEventListener('click', saveGeneralSettings);
+    document.getElementById('btn-save-general')?.addEventListener('click', saveGeneralSettings);
 }
 
 async function saveGeneralSettings() {
@@ -1502,18 +1504,20 @@ async function loadSettings() {
     try {
         const data = await API.getSettings();
         const s = data.settings;
-        document.getElementById('cfg-bot-active').checked = s.bot_active !== false;
-        document.getElementById('cfg-orders-paused').checked = s.orders_paused !== true;
+        const botActive = document.getElementById('cfg-bot-active');
+        if (botActive) botActive.checked = s.bot_active !== false;
+        const ordersPaused = document.getElementById('cfg-orders-paused');
+        if (ordersPaused) ordersPaused.checked = s.orders_paused !== true;
     } catch { /* use defaults */ }
 
-    document.getElementById('cfg-bot-active').addEventListener('change', async (e) => {
+    document.getElementById('cfg-bot-active')?.addEventListener('change', async (e) => {
         try {
             await API.saveSettings({ bot_active: e.target.checked });
             showToast(e.target.checked ? 'Bot ativado' : 'Bot pausado', e.target.checked ? 'success' : 'info');
         } catch (err) { e.target.checked = !e.target.checked; showToast('Erro', 'error'); }
     });
 
-    document.getElementById('cfg-orders-paused').addEventListener('change', async (e) => {
+    document.getElementById('cfg-orders-paused')?.addEventListener('change', async (e) => {
         try {
             await API.saveSettings({ orders_paused: !e.target.checked });
             showToast(e.target.checked ? 'Pedidos ativos' : 'Pedidos pausados', e.target.checked ? 'success' : 'info');
