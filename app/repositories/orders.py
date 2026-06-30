@@ -45,15 +45,16 @@ async def create_draft_order(
     return order
 
 
-async def get_active_order(db: AsyncSession, conversation_id: int) -> Order | None:
-    """Retorna o pedido em andamento (RASCUNHO) para a conversa."""
+async def get_active_order(db: AsyncSession, conversation_id: UUID) -> Order | None:
+    """Busca o rascunho atual da conversa."""
     query = (
         select(Order)
         .where(
             Order.conversation_id == conversation_id,
-            Order.status == OrderStatus.RASCUNHO
+            Order.status == OrderStatus.RASCUNHO.value
         )
         .order_by(Order.created_at.desc())
+        .limit(1)
     )
     result = await db.execute(query)
     return result.scalar_one_or_none()
@@ -65,9 +66,9 @@ async def cancel_old_drafts(db: AsyncSession, conversation_id: int) -> list[UUID
         update(Order)
         .where(
             Order.conversation_id == conversation_id,
-            Order.status == OrderStatus.RASCUNHO
+            Order.status == OrderStatus.RASCUNHO.value
         )
-        .values(status=OrderStatus.CANCELADO)
+        .values(status=OrderStatus.CANCELADO.value)
         .returning(Order.id)
     )
     result = await db.execute(query)
@@ -255,7 +256,7 @@ async def finalize_order(db: AsyncSession, order_id: UUID) -> None:
     await db.execute(
         update(Order)
         .where(Order.id == order_id)
-        .values(status=OrderStatus.AGUARDANDO_CONFIRMACAO)
+        .values(status=OrderStatus.AGUARDANDO_CONFIRMACAO.value)
     )
     await db.flush()
 
@@ -265,7 +266,7 @@ async def cancel_order(db: AsyncSession, order_id: UUID) -> None:
     await db.execute(
         update(Order)
         .where(Order.id == order_id)
-        .values(status=OrderStatus.CANCELADO)
+        .values(status=OrderStatus.CANCELADO.value)
     )
     await db.flush()
 
@@ -300,7 +301,8 @@ async def list_orders_by_status(
     limit: int = 200,
     offset: int = 0,
 ) -> list[Order]:
-    """Lista pedidos filtrados por status(es), para o Kanban."""
+    """Lista pedidos por status."""
+    status_values = [s.value for s in statuses]
     query = (
         select(Order)
         .options(
@@ -311,7 +313,7 @@ async def list_orders_by_status(
             joinedload(Order.finish),
             selectinload(Order.order_extras).joinedload(OrderExtra.extra),
         )
-        .where(Order.status.in_(statuses))
+        .where(Order.status.in_(status_values))
         .order_by(Order.pickup_date.asc().nullslast(), Order.pickup_time.asc().nullslast())
         .limit(limit)
         .offset(offset)
@@ -330,7 +332,7 @@ async def count_orders_by_date(
     else:
         end = date(year, month + 1, 1)
 
-    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+    excluded = [OrderStatus.RASCUNHO.value, OrderStatus.CANCELADO.value]
     query = (
         select(
             Order.pickup_date,
@@ -348,10 +350,13 @@ async def count_orders_by_date(
 
 
 async def list_orders_by_date(
-    db: AsyncSession, target_date: date
+    db: AsyncSession,
+    target_date: date,
+    limit: int = 200,
+    offset: int = 0,
 ) -> list[Order]:
-    """Lista pedidos de uma data específica."""
-    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+    """Lista pedidos para uma data específica."""
+    excluded = [OrderStatus.RASCUNHO.value, OrderStatus.CANCELADO.value]
     query = (
         select(Order)
         .options(
@@ -372,14 +377,12 @@ async def list_orders_by_date(
     return list(result.unique().scalars().all())
 
 
-async def update_order_status(
-    db: AsyncSession, order_id: UUID, new_status: OrderStatus
-) -> bool:
-    """Muda o status de um pedido. Retorna True se encontrou."""
+async def update_order_status(db: AsyncSession, order_id: UUID, new_status: OrderStatus) -> bool:
+    """Atualiza o status de um pedido."""
     result = await db.execute(
         update(Order)
         .where(Order.id == order_id)
-        .values(status=new_status)
+        .values(status=new_status.value)
     )
     await db.flush()
     return result.rowcount > 0
@@ -494,7 +497,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
 
-    excluded = [OrderStatus.RASCUNHO, OrderStatus.CANCELADO]
+    excluded = [OrderStatus.RASCUNHO.value, OrderStatus.CANCELADO.value]
 
     # Pedidos agendados para hoje
     today_q = await db.execute(
@@ -508,7 +511,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
     # Aguardando confirmação
     aguardando_q = await db.execute(
         select(func.count(Order.id)).where(
-            Order.status == OrderStatus.AGUARDANDO_CONFIRMACAO,
+            Order.status == OrderStatus.AGUARDANDO_CONFIRMACAO.value,
         )
     )
     aguardando_count = aguardando_q.scalar_one()
