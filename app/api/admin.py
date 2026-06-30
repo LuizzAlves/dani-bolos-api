@@ -60,14 +60,19 @@ def _serialize_order_list(order: Order) -> dict:
             name = oe.extra.name if oe.extra else f"Extra #{oe.extra_id}"
             extras.append(f"{name} ({oe.layers} cam.)")
 
+    def get_enum_value(val):
+        if val is None:
+            return None
+        return val.value if hasattr(val, "value") else str(val)
+
     return {
         "id": str(order.id),
         "order_number": order.order_number,
         "client_name": order.client.name if order.client else None,
         "client_phone": order.client.phone if order.client else None,
-        "status": order.status.value if order.status else None,
+        "status": get_enum_value(order.status),
         "size_description": order.size.description if order.size else None,
-        "dough": order.dough.value if order.dough else None,
+        "dough": get_enum_value(order.dough),
         "filling_1": order.filling_1.name if order.filling_1 else None,
         "filling_2": order.filling_2.name if order.filling_2 else None,
         "finish": order.finish.name if order.finish else None,
@@ -89,13 +94,18 @@ def _serialize_order_detail(order: Order) -> dict:
         for oe in order.order_extras:
             extras_raw.append({"extra_id": oe.extra_id, "layers": oe.layers})
 
+    def get_enum_value(val):
+        if val is None:
+            return None
+        return val.value if hasattr(val, "value") else str(val)
+
     base.update({
         "size_id": order.size_id,
         "filling_1_id": order.filling_1_id,
         "filling_2_id": order.filling_2_id,
         "finish_id": order.finish_id,
         "extras_raw": extras_raw,
-        "shape": order.shape.value if order.shape else None,
+        "shape": get_enum_value(order.shape),
         "filling_count": order.filling_count,
         "base_value": float(order.base_value) if order.base_value else None,
         "extras_value": float(order.extras_value) if order.extras_value else None,
